@@ -22,10 +22,13 @@ library
       , vector
       , vector-binary
       , hashable
+      , mtl
 
     exposed-modules:
         Data.DAWG.Unboxed
       , Data.Trie.Unboxed
+      , Data.DAWG
+      , Data.DAWG.VMap
 
     ghc-options: -Wall
 

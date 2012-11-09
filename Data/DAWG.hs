@@ -6,11 +6,22 @@
 -- which can be used to build the DAWG structure incrementaly.
 
 module Data.DAWG
-(
+( Id
+, Node (..)
+, Graph (..)
+, emptyG
+, DAWG (..)
+, empty
+, insert
+, lookup
+, fromList
+, fromLang
 ) where
 
+import Prelude hiding (lookup)
 import Control.Applicative ((<$>))
 import Control.Monad (when)
+import Data.List (foldl')
 import qualified Data.Map as M
 import qualified Data.IntSet as IS
 import qualified Data.IntMap as IM
@@ -51,6 +62,14 @@ data Graph a = Graph {
     -- | Number of ingoing edges.
     , ingoMap   :: !(IM.IntMap Int) }
     deriving (Show, Eq, Ord)
+
+-- | Empty graph.
+emptyG :: Graph a
+emptyG = Graph
+    (M.singleton leaf 0)
+    IS.empty
+    (IM.singleton 0 leaf)
+    (IM.singleton 0 1)
 
 -- | Add new graph node.
 newNode :: Ord a => Node a -> Graph a -> (Id, Graph a)
@@ -102,58 +121,85 @@ idBy n = do
     m <- idMap <$> S.get
     return (m M.! n)
 
--- | Child identifier found by following the given character
--- of empty node, if no such edge exists. 
-follow :: Ord a => Char -> Node a -> GraphM a Id
-follow x n = case V.lookup x (edges n) of   
-    Just i  -> return i
-    Nothing -> hoist leaf
+-- -- | Child identifier found by following the given character.
+-- follow :: Char -> Node a -> Maybe Id
+-- follow x n = V.lookup x (edges n)
+-- 
+-- -- | Increase the number of node ingoing edges and, if the node
+-- -- is not a member of the graph, add it.  Return the node identifier
+-- -- resulting from the operation.
+-- hoist :: Ord a => Node a -> GraphM a Id
+-- hoist n = do
+--     m <- idMap <$> S.get
+--     i <- case M.lookup n m of
+--         Just i  -> return i
+--         Nothing -> S.state (newNode n)
+--     S.state (mkState (incIngo i))
+--     return i
+-- 
+-- -- | Decrease number of node ingoing edges and, if the resulting number
+-- -- is equal to 0, remove the node from the graph.
+-- lower :: Ord a => Node a -> GraphM a ()
+-- lower n = do
+--     i <- idBy n
+--     num <- S.state (decIngo i)
+--     when (num == 0) $ do
+--         S.state (mkState (remNode i))
+-- 
+-- -- | Substitue the identifier of the child determined by the given
+-- -- character.
+-- subst :: Char -> Id -> Node a -> Node a
+-- subst x i n = n { edges = V.insert x i (edges n) }
+-- {-# INLINE subst #-}
 
--- | Increase the number of node ingoing edges and, if the node
--- is not a member of the graph, add it.  Return the node identifier
--- resulting from the operation.
-hoist :: Ord a => Node a -> GraphM a Id
-hoist n = do
-    m <- idMap <$> S.get
-    i <- case M.lookup n m of
-        Just i  -> return i
-        Nothing -> S.state (newNode n)
-    S.state (mkState (incIngo i))
-    return i
-
--- | Decrease number of node ingoing edges and, if the resulting number
--- is equal to 0, remove the node from the graph.
-lower :: Ord a => Node a -> GraphM a ()
-lower n = do
-    i <- idBy n
-    num <- S.state (decIngo i)
-    when (num == 0) $ do
-        S.state (mkState (remNode i))
-
--- | Substitue the identifier of the child determined by the given
--- character.
-subst :: Char -> Id -> Node a -> Node a
-subst x i n = n { edges = V.insert x i (edges n) }
-{-# INLINE subst #-}
+data Edge a = Edge (Maybe Id) a Id deriving (Show, Eq, Ord)
     
-insertM :: Ord a => String -> a -> Id -> GraphM a Id
+-- | Insert the (key, value) pair into the DAWG and return the
+-- resultant path of node identifiers.
+insertM :: Ord a => String -> a -> Id -> GraphM a [Id]
 insertM [] y i = do
     n <- nodeBy i
-    -- TODO: Check, if the value is different!
-    lower n
-    hoist (n { value = Just y })
+    register (n { value = Just y })
 insertM (x:xs) y i = do
     n <- nodeBy i
-    j <- follow x n
+    j <- case onChar x n of
+        Just j  -> return j
+        Nothing -> register leaf
     k <- insertM xs y j
-    if k == j
-        then return i
-        else lower n >> hoist (subst x k n)
+    register (subst x k n)
+
+lookupM :: String -> Id -> GraphM a (Maybe a)
+lookupM [] i = value <$> nodeBy i
+lookupM (x:xs) i = do
+    n <- nodeBy i
+    case follow x n of
+        Just j  -> lookupM xs j
+        Nothing -> return Nothing
 
 data DAWG a = DAWG
-    { graph :: Graph a
-    , root  :: Id }
+    { graph :: !(Graph a)
+    , root  :: !Id }
     deriving (Show, Eq, Ord)
 
--- insert :: Ord a => String -> a -> DAWG a -> DAWG a
--- insert 
+-- | Empty DAWG.
+empty :: DAWG a
+empty = DAWG emptyG 0
+
+insert :: Ord a => String -> a -> DAWG a -> DAWG a
+insert xs y d =
+    let (i, g) = S.runState (insertM xs y $ root d) (graph d)
+    in  DAWG g i
+
+lookup :: String -> DAWG a -> Maybe a
+lookup xs d = S.evalState (lookupM xs $ root d) (graph d)
+
+-- | Construct DAWG from the list of (word, value) pairs.
+fromList :: (Ord a) => [(String, a)] -> DAWG a
+fromList xs =
+    let update t (x, v) = insert x v t
+    in  foldl' update empty xs
+
+-- | Make DAWG from the list of words.  Annotate each word with
+-- the @()@ value.
+fromLang :: [String] -> DAWG ()
+fromLang xs = fromList [(x, ()) | x <- xs]
