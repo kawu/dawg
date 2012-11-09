@@ -10,8 +10,10 @@ module Data.DAWG
 , Node (..)
 , Graph (..)
 , emptyG
+, sizeG
 , DAWG (..)
 , empty
+, size
 , insert
 , lookup
 , fromList
@@ -71,6 +73,10 @@ emptyG = Graph
     (IM.singleton 0 leaf)
     (IM.singleton 0 1)
 
+-- | Size of the graph (number of nodes).
+sizeG :: Graph a -> Int
+sizeG = M.size . idMap
+
 -- | Add new graph node.
 newNode :: Ord a => Node a -> Graph a -> (Id, Graph a)
 newNode n Graph{..} =
@@ -121,58 +127,56 @@ idBy n = do
     m <- idMap <$> S.get
     return (m M.! n)
 
--- -- | Child identifier found by following the given character.
--- follow :: Char -> Node a -> Maybe Id
--- follow x n = V.lookup x (edges n)
--- 
--- -- | Increase the number of node ingoing edges and, if the node
--- -- is not a member of the graph, add it.  Return the node identifier
--- -- resulting from the operation.
--- hoist :: Ord a => Node a -> GraphM a Id
--- hoist n = do
---     m <- idMap <$> S.get
---     i <- case M.lookup n m of
---         Just i  -> return i
---         Nothing -> S.state (newNode n)
---     S.state (mkState (incIngo i))
---     return i
--- 
--- -- | Decrease number of node ingoing edges and, if the resulting number
--- -- is equal to 0, remove the node from the graph.
--- lower :: Ord a => Node a -> GraphM a ()
--- lower n = do
---     i <- idBy n
---     num <- S.state (decIngo i)
---     when (num == 0) $ do
---         S.state (mkState (remNode i))
--- 
--- -- | Substitue the identifier of the child determined by the given
--- -- character.
--- subst :: Char -> Id -> Node a -> Node a
--- subst x i n = n { edges = V.insert x i (edges n) }
--- {-# INLINE subst #-}
+-- | Child identifier found by following the given character.
+onChar :: Char -> Node a -> Maybe Id
+onChar x n = V.lookup x (edges n)
 
-data Edge a = Edge (Maybe Id) a Id deriving (Show, Eq, Ord)
-    
--- | Insert the (key, value) pair into the DAWG and return the
--- resultant path of node identifiers.
-insertM :: Ord a => String -> a -> Id -> GraphM a [Id]
+-- | Increase the number of node ingoing edges and, if the node
+-- is not a member of the graph, add it.  Return the node identifier
+-- resulting from the operation.
+hoist :: Ord a => Node a -> GraphM a Id
+hoist n = do
+    m <- idMap <$> S.get
+    i <- case M.lookup n m of
+        Just i  -> return i
+        Nothing -> S.state (newNode n)
+    S.state (mkState (incIngo i))
+    return i
+
+-- | Decrease number of node ingoing edges and, if the resulting number
+-- is equal to 0, remove the node from the graph.
+lower :: Ord a => Node a -> GraphM a ()
+lower n = do
+    i <- idBy n
+    num <- S.state (decIngo i)
+    when (num == 0) $ do
+        S.state (mkState (remNode i))
+
+-- | Substitue the identifier of the child determined by the given
+-- character.
+subst :: Char -> Id -> Node a -> Node a
+subst x i n = n { edges = V.insert x i (edges n) }
+{-# INLINE subst #-}
+
+insertM :: Ord a => String -> a -> Id -> GraphM a Id
 insertM [] y i = do
     n <- nodeBy i
-    register (n { value = Just y })
+    lower n
+    hoist (n { value = Just y })
 insertM (x:xs) y i = do
     n <- nodeBy i
     j <- case onChar x n of
         Just j  -> return j
-        Nothing -> register leaf
+        Nothing -> hoist leaf
     k <- insertM xs y j
-    register (subst x k n)
-
+    lower n
+    hoist (subst x k n)
+    
 lookupM :: String -> Id -> GraphM a (Maybe a)
 lookupM [] i = value <$> nodeBy i
 lookupM (x:xs) i = do
     n <- nodeBy i
-    case follow x n of
+    case onChar x n of
         Just j  -> lookupM xs j
         Nothing -> return Nothing
 
@@ -184,6 +188,10 @@ data DAWG a = DAWG
 -- | Empty DAWG.
 empty :: DAWG a
 empty = DAWG emptyG 0
+
+-- | DAWG size (number of nodes).
+size :: DAWG a -> Int
+size = sizeG . graph
 
 insert :: Ord a => String -> a -> DAWG a -> DAWG a
 insert xs y d =
