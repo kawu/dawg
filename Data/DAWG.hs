@@ -24,9 +24,9 @@ import Prelude hiding (lookup)
 import Control.Applicative ((<$>))
 import Control.Monad (when)
 import Data.List (foldl')
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
 import qualified Data.IntSet as IS
-import qualified Data.IntMap as IM
+import qualified Data.IntMap.Strict as IM
 import qualified Control.Monad.State.Strict as S
 
 import qualified Data.DAWG.VMap as V
