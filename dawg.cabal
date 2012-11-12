@@ -28,6 +28,7 @@ library
         Data.DAWG.Unboxed
       , Data.Trie.Unboxed
       , Data.DAWG
+      , Data.DAWG.Graph
       , Data.DAWG.VMap
 
     ghc-options: -Wall
