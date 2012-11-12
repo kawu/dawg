@@ -1,10 +1,10 @@
 {-# LANGUAGE RecordWildCards #-}
 
 -- | The module provides a /directed acyclic graph/ (DAG) implementation
--- where all equivalent nodes (i.e. roots of DAGs equal with respect
--- to '==') are compressed to one node with unique identifier.
--- It can be alternatively thought of as a /minimal acyclic
--- finite-state automata/.
+-- where all equivalent nodes (i.e. roots of DAGs equal with respect to
+-- the '==' function) are compressed to one node with unique identifier.
+-- It can be alternatively thought of as a
+-- /minimal acyclic finite-state automata/.
 
 module Data.DAWG.Graph
 ( 

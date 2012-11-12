@@ -60,6 +60,8 @@ lookupM (x:xs) i = do
         Just j  -> lookupM xs j
         Nothing -> return Nothing
 
+-- | A 'G.Graph' with one root from which all other graph nodes should
+-- be accesible.
 data DAWG a = DAWG
     { graph :: !(Graph a)
     , root  :: !Id }
@@ -73,11 +75,13 @@ empty = DAWG G.empty 0
 size :: DAWG a -> Int
 size = G.size . graph
 
+-- | Insert the (key, value) pair into the DAWG.
 insert :: Ord a => String -> a -> DAWG a -> DAWG a
 insert xs y d =
     let (i, g) = S.runState (insertM xs y $ root d) (graph d)
     in  DAWG g i
 
+-- | Find value associated with the key.
 lookup :: String -> DAWG a -> Maybe a
 lookup xs d = S.evalState (lookupM xs $ root d) (graph d)
 
