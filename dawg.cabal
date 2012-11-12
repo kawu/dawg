@@ -21,7 +21,6 @@ library
       , binary
       , vector
       , vector-binary
-      , hashable
       , mtl
 
     exposed-modules:
@@ -33,4 +32,4 @@ library
 
 source-repository head
     type: git
-    location: git://github.com/kawu/dawg.git
+    location: https://github.com/kawu/dawg.git

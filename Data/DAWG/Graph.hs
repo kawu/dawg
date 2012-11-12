@@ -24,6 +24,8 @@ module Data.DAWG.Graph
 , delete
 ) where
 
+import Control.Applicative ((<$>), (<*>))
+import Data.Binary (Binary, put, get)
 import qualified Data.Map.Strict as M
 import qualified Data.IntSet as IS
 import qualified Data.IntMap.Strict as IM
@@ -41,6 +43,10 @@ data Node a = Node
     { value :: Maybe a
     , edges :: V.VMap Id }
     deriving (Show, Eq, Ord)
+
+instance Binary a => Binary (Node a) where
+    put Node{..} = put value >> put edges
+    get = Node <$> get <*> get
 
 -- | Leaf node with no children and 'Nothing' value.
 leaf :: Node a
@@ -78,6 +84,14 @@ data Graph a = Graph {
     -- | Number of ingoing edges.
     , ingoMap   :: !(IM.IntMap Int) }
     deriving (Show, Eq, Ord)
+
+instance (Binary a, Ord a) => Binary (Graph a) where
+    put Graph{..} = do
+    	put idMap
+	put freeIDs
+	put nodeMap
+	put ingoMap
+    get = Graph <$> get <*> get <*> get <*> get
 
 -- | Empty graph.
 empty :: Graph a

@@ -9,6 +9,9 @@ module Data.DAWG.VMap
 ) where
 
 import Prelude hiding (lookup)
+import Control.Applicative ((<$>))
+import Data.Binary (Binary, put, get)
+import Data.Vector.Binary ()
 import qualified Data.Map as M
 import qualified Data.Vector.Unboxed as U
 
@@ -16,6 +19,10 @@ import qualified Data.Vector.Unboxed as U
 -- to 'fst' values.
 newtype VMap a = VMap { unVMap :: U.Vector (Char, a) }
     deriving (Show, Eq, Ord)
+
+instance (Binary a, U.Unbox a) => Binary (VMap a) where
+    put v = put (unVMap v)
+    get = VMap <$> get
 
 -- | Smart VMap constructor which ensures that the underlying vector is
 -- strictly ascending with respect to 'fst' values.

@@ -14,8 +14,9 @@ module Data.DAWG
 ) where
 
 import Prelude hiding (lookup)
-import Control.Applicative ((<$>))
+import Control.Applicative ((<$>), (<*>))
 import Data.List (foldl')
+import Data.Binary (Binary, put, get)
 import qualified Control.Monad.State.Strict as S
 
 import Data.DAWG.Graph (Id, Node, Graph)
@@ -66,6 +67,12 @@ data DAWG a = DAWG
     { graph :: !(Graph a)
     , root  :: !Id }
     deriving (Show, Eq, Ord)
+
+instance (Binary a, Ord a) => Binary (DAWG a) where
+    put d = do
+        put (graph d)
+        put (root d)
+    get = DAWG <$> get <*> get
 
 -- | Empty DAWG.
 empty :: DAWG a
