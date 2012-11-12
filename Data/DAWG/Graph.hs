@@ -58,10 +58,15 @@ subst :: Char -> Id -> Node a -> Node a
 subst x i n = n { edges = V.insert x i (edges n) }
 
 -- | A set of nodes.  To every node a unique identifier is assigned.
--- Invariants: (1) freeIDs \intersection elemSet idMap = \emptySet
--- (2) freeIDs \sum elemSet idMap = {0, 1, ..., maximum (elemSet idMap) - 1}.
--- TODO: Is it possible to enforce that idMap keys are nodeMap elems
--- are not duplicated in memory?
+-- Invariants: 
+--
+--   * freeIDs \\intersection occupiedIDs = \\emptySet,
+--
+--   * freeIDs \\sum occupiedIDs =
+--     {0, 1, ..., |freeIDs \\sum occupiedIDs| - 1},
+--
+-- where occupiedIDs = elemSet idMap.
+--
 -- TODO: Is it possible to merge freeIDs with ingoMap to save some memory?
 data Graph a = Graph {
     -- | Map from nodes to IDs.
@@ -136,7 +141,9 @@ insert n g = case M.lookup n (idMap g) of
     Nothing -> newNode n g
 
 -- | Delete node from the graph.  If the node was present in the graph
--- on multiple positions, just decrease the number of ingoing edges.
+-- at multiple positions, just decrease the number of ingoing edges.
+-- NOTE: The function does not delete descendant nodes which may become
+-- inaccesible.
 delete :: Ord a => Node a -> Graph a -> Graph a
 delete n g = if num == 0
     then remNode i g'

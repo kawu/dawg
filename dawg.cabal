@@ -10,7 +10,7 @@ copyright:          Copyright (c) 2012 IPI PAN
 author:             Jakub Waszczuk
 maintainer:         waszczuk.kuba@gmail.com
 stability:          experimental
-category:           Natural Language Processing ???????
+category:           Data, Data Structures
 homepage:           https://github.com/kawu/dawg
 build-type:         Simple
 

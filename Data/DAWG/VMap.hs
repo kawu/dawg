@@ -1,4 +1,4 @@
--- | A vector representation of "Data.Map.Map". 
+-- | A vector representation of 'M.Map'.
 
 module Data.DAWG.VMap
 ( VMap (unVMap)
@@ -12,7 +12,7 @@ import Prelude hiding (lookup)
 import qualified Data.Map as M
 import qualified Data.Vector.Unboxed as U
 
--- | An strictly ascending vector of distinct elements with respect
+-- | A strictly ascending vector of distinct elements with respect
 -- to 'fst' values.
 newtype VMap a = VMap { unVMap :: U.Vector (Char, a) }
     deriving (Show, Eq, Ord)
@@ -23,15 +23,19 @@ mkVMap :: U.Unbox a => [(Char, a)] -> VMap a
 mkVMap = VMap . U.fromList . M.toAscList  . M.fromList 
 {-# INLINE mkVMap #-}
 
+-- | Empty map.
 empty :: U.Unbox a => VMap a
 empty = VMap U.empty
 {-# INLINE empty #-}
 
+-- | Lookup the character in the map.
 lookup :: U.Unbox a => Char -> VMap a -> Maybe a
 lookup x = fmap snd . U.find ((==x) . fst) . unVMap
 {-# INLINE lookup #-}
 
--- | TODO: Optimize!  Use the invariant, that VMap is an ascending vector.
+-- | Insert the (character, value) pair into the map.
+-- TODO: Optimize!  Use the invariant, that VMap is
+-- kept in an ascending vector.
 insert :: U.Unbox a => Char -> a -> VMap a -> VMap a
 insert x y
     = VMap . U.fromList . M.toAscList
