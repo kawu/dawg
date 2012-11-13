@@ -49,7 +49,7 @@ instance Binary a => Binary (Node a) where
     put Node{..} = put value >> put edges
     get = Node <$> get <*> get
 
--- Identifier of the child determined by the given character.
+-- | Identifier of the child determined by the given character.
 onChar :: Char -> Node a -> Maybe Id
 onChar x n = V.lookup x (edges n)
 
