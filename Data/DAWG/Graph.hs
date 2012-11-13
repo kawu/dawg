@@ -112,7 +112,7 @@ size = M.size . idMap
 nodeBy :: Id -> Graph a -> Node a
 nodeBy i g = nodeMap g IM.! i
 
--- | Retrive the node identifier.
+-- | Retrieve the node identifier.
 nodeID :: Ord a => Node a -> Graph a -> Id
 nodeID n g = idMap g M.! n
 
