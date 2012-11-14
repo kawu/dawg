@@ -90,7 +90,7 @@ data DAWG a = DAWG
     , root  :: !Id }
     deriving (Show, Eq, Ord)
 
-instance (Binary a, Ord a) => Binary (DAWG a) where
+instance (Ord a, Binary a) => Binary (DAWG a) where
     put d = do
         put (graph d)
         put (root d)
@@ -123,7 +123,7 @@ lookup :: String -> DAWG a -> Maybe a
 lookup xs d = S.evalState (lookupM xs $ root d) (graph d)
 
 -- | Construct DAWG from the list of (word, value) pairs.
-fromList :: (Ord a) => [(String, a)] -> DAWG a
+fromList :: Ord a => [(String, a)] -> DAWG a
 fromList xs =
     let update t (x, v) = insert x v t
     in  foldl' update empty xs

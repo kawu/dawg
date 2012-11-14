@@ -1,8 +1,13 @@
 name:               dawg
 version:            0.2.0
-synopsis:           DAWG
+synopsis:           Directed acyclic word graphs
 description:
-    Directed acyclic word graphs.
+    The library implements /directed acyclic word graphs/ (DAWGs), which can
+    be also interpreted as /minimal acyclic finite-state automata/. 
+    .
+    In most cases you can use the "Data.DAWG" module which provides the basic
+    implementations of DAWGs.  If values have substantial memory footptint
+    consider using the "Data.DAWG.Wrapper" module instead.
 license:            BSD3
 license-file:       LICENSE
 cabal-version:      >= 1.6
@@ -17,18 +22,20 @@ build-type:         Simple
 library
     build-depends:
         base >= 4 && < 5
-      , containers >= 0.5 && < 0.6
+      , containers
       , binary
       , vector
       , vector-binary
       , mtl
+      , monad-codec >= 0.2 && < 0.3
 
     exposed-modules:
         Data.DAWG
+      , Data.DAWG.Wrapper
       , Data.DAWG.Graph
       , Data.DAWG.VMap
 
-    ghc-options: -Wall
+    ghc-options: -Wall -O2
 
 source-repository head
     type: git

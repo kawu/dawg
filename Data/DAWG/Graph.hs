@@ -24,9 +24,9 @@ module Data.DAWG.Graph
 
 import Control.Applicative ((<$>), (<*>))
 import Data.Binary (Binary, put, get)
-import qualified Data.Map.Strict as M
+import qualified Data.Map as M
 import qualified Data.IntSet as IS
-import qualified Data.IntMap.Strict as IM
+import qualified Data.IntMap as IM
 
 import qualified Data.DAWG.VMap as V
 
@@ -84,7 +84,7 @@ data Graph a = Graph {
     , ingoMap   :: !(IM.IntMap Int) }
     deriving (Show, Eq, Ord)
 
-instance (Binary a, Ord a) => Binary (Graph a) where
+instance (Ord a, Binary a) => Binary (Graph a) where
     put Graph{..} = do
     	put idMap
 	put freeIDs
@@ -95,14 +95,6 @@ instance (Binary a, Ord a) => Binary (Graph a) where
 -- | Empty graph.
 empty :: Graph a
 empty = Graph M.empty IS.empty IM.empty IM.empty
-
--- -- | Empty graph.
--- empty :: Graph a
--- empty = Graph
---     (M.singleton leaf 0)
---     IS.empty
---     (IM.singleton 0 leaf)
---     (IM.singleton 0 1)
 
 -- | Size of the graph (number of nodes).
 size :: Graph a -> Int
@@ -141,7 +133,7 @@ remNode i Graph{..} =
 
 -- | Increment the number of ingoing paths.
 incIngo :: Id -> Graph a -> Graph a
-incIngo i g = g { ingoMap = IM.adjust (+1) i (ingoMap g) }
+incIngo i g = g { ingoMap = IM.insertWith' (+) i 1 (ingoMap g) }
 
 -- | Descrement the number of ingoing paths and return
 -- the resulting number.
