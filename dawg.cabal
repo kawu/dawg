@@ -6,7 +6,7 @@ description:
     be also interpreted as /minimal acyclic finite-state automata/. 
     .
     In most cases you can use the "Data.DAWG" module which provides the basic
-    implementations of DAWGs.  If values have substantial memory footprint
+    implementation of DAWGs.  If values have substantial memory footprint
     consider using the "Data.DAWG.Wrapper" module instead.
 license:            BSD3
 license-file:       LICENSE
