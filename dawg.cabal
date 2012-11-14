@@ -1,12 +1,12 @@
 name:               dawg
-version:            0.2.0
+version:            0.3.0
 synopsis:           Directed acyclic word graphs
 description:
     The library implements /directed acyclic word graphs/ (DAWGs), which can
     be also interpreted as /minimal acyclic finite-state automata/. 
     .
     In most cases you can use the "Data.DAWG" module which provides the basic
-    implementations of DAWGs.  If values have substantial memory footptint
+    implementations of DAWGs.  If values have substantial memory footprint
     consider using the "Data.DAWG.Wrapper" module instead.
 license:            BSD3
 license-file:       LICENSE
