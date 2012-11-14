@@ -10,9 +10,11 @@ module Data.DAWG.Wrapper
 , empty
 , numStates
 , insert
+, insertWith
 , delete
 , lookup
 , fromList
+, fromListWith
 , fromLang
 ) where
 
@@ -40,6 +42,19 @@ insert xs y d =
     let (y', c') = C.runCodec (codec d) (C.encode C.idLens y)
     in  DAWG (D.insert xs y' (dawg d)) c'
 
+-- | Insert with a function, combining new value and old value.
+-- 'insertWith' f key value d will insert the pair (key, value) into d if
+-- key does not exist in the DAWG. If the key does exist, the function
+-- will insert the pair (key, f new_value old_value).
+insertWith :: Ord a => (a -> a -> a) -> String -> a -> DAWG a -> DAWG a
+insertWith f xs y d =
+    let (y'', c') = C.runCodec (codec d) (C.encode C.idLens y')
+    in  DAWG (D.insert xs y'' (dawg d)) c'
+  where
+    y' = case lookup xs d of
+        Just old -> f y old
+        Nothing  -> y
+
 -- | Delete the key from the DAWG.
 delete :: Ord a => String -> DAWG a -> DAWG a
 delete xs d = DAWG (D.delete xs (dawg d)) (codec d)
@@ -54,6 +69,14 @@ lookup xs d =
 fromList :: Ord a => [(String, a)] -> DAWG a
 fromList xs =
     let update t (x, v) = insert x v t
+    in  foldl' update empty xs
+
+-- | Construct DAWG from the list of (word, value) pairs
+-- with a combining function.  The combining function is
+-- applied strictly.
+fromListWith :: Ord a => (a -> a -> a) -> [(String, a)] -> DAWG a
+fromListWith f xs =
+    let update t (x, v) = insertWith f x v t
     in  foldl' update empty xs
 
 -- | Make DAWG from the list of words.  Annotate each word with
