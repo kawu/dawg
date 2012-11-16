@@ -37,26 +37,34 @@ type Id = Int
 -- consequently, they must be represented as one node in the graph)
 -- iff they are equal with respect to their values and outgoing
 -- edges.
-data Node a = Node
-    { value :: !a
-    , edges :: !(V.VMap Id) }
+--
+-- Invariant: the 'value' identifier always points to the 'Value' node.
+-- 'edges', on the other hand, point to 'Branch' nodes.
+data Node a
+    = Branch
+        { eps   :: {-# UNPACK #-} !Id
+        , edges :: !(V.VMap Id) }
+    | Value
+        { unValue :: !a }
     deriving (Show, Eq, Ord)
 
-instance Functor Node where
-    fmap f n = n { value = f (value n) }
-
-instance Binary a => Binary (Node a) where
-    put Node{..} = put value >> put edges
-    get = Node <$> get <*> get
+-- instance Functor Node where
+--     fmap f n = n { value = f (value n) }
+-- 
+-- instance Binary a => Binary (Node a) where
+--     put Node{..} = put value >> put edges
+--     get = Node <$> get <*> get
 
 -- | Identifier of the child determined by the given character.
 onChar :: Char -> Node a -> Maybe Id
-onChar x n = V.lookup x (edges n)
+onChar x (Branch _ es)  = V.lookup x es
+onChar _ (Value _)      = error "onChar: value node"
 
 -- | Substitue the identifier of the child determined by the given
 -- character.
 subst :: Char -> Id -> Node a -> Node a
-subst x i n = n { edges = V.insert x i (edges n) }
+subst x i (Branch w es) = Branch w (V.insert x i es)
+subst _ _ (Value _)     = error "subst: value node"
 
 -- | A set of nodes.  To every node a unique identifier is assigned.
 -- Invariants: 
@@ -84,13 +92,13 @@ data Graph a = Graph {
     , ingoMap   :: !(IM.IntMap Int) }
     deriving (Show, Eq, Ord)
 
-instance (Ord a, Binary a) => Binary (Graph a) where
-    put Graph{..} = do
-    	put idMap
-	put freeIDs
-	put nodeMap
-	put ingoMap
-    get = Graph <$> get <*> get <*> get <*> get
+-- instance (Ord a, Binary a) => Binary (Graph a) where
+--     put Graph{..} = do
+--     	put idMap
+-- 	put freeIDs
+-- 	put nodeMap
+-- 	put ingoMap
+--     get = Graph <$> get <*> get <*> get <*> get
 
 -- | Empty graph.
 empty :: Graph a
