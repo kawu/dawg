@@ -32,8 +32,8 @@ mkState :: (Graph a -> Graph a) -> Graph a -> ((), Graph a)
 mkState f g = ((), f g)
 
 -- | Leaf node with no children and 'Nothing' value.
-leaf :: Ord a => GraphM a Id 
-leaf = do
+insertLeaf :: Ord a => GraphM a Id 
+insertLeaf = do
     i <- insertNode (G.Value Nothing)
     insertNode (G.Branch i V.empty)
 
@@ -55,7 +55,7 @@ insertM (x:xs) y i = do
     n <- nodeBy i
     j <- case G.onChar x n of
         Just j  -> return j
-        Nothing -> leaf
+        Nothing -> insertLeaf
     k <- insertM xs y j
     deleteNode n
     insertNode (G.subst x k n)
@@ -125,8 +125,7 @@ data DAWG a = DAWG
 -- | Empty DAWG.
 empty :: Ord a => DAWG a
 empty = 
-    let insertLeaf = insertNode =<< nodeBy =<< leaf 
-        (i, g) = S.runState insertLeaf G.empty
+    let (i, g) = S.runState insertLeaf G.empty
     in  DAWG g i
 
 -- | Number of states in the underlying graph.
