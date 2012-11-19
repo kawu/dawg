@@ -23,7 +23,7 @@ module Data.DAWG.Graph
 ) where
 
 import Control.Applicative ((<$>), (<*>))
-import Data.Binary (Binary, put, get)
+import Data.Binary (Binary, Get, put, get)
 import qualified Data.Map as M
 import qualified Data.IntSet as IS
 import qualified Data.IntMap as IM
@@ -48,12 +48,18 @@ data Node a
         { unValue :: !a }
     deriving (Show, Eq, Ord)
 
--- instance Functor Node where
---     fmap f n = n { value = f (value n) }
--- 
--- instance Binary a => Binary (Node a) where
---     put Node{..} = put value >> put edges
---     get = Node <$> get <*> get
+instance Functor Node where
+    fmap f (Value x) = Value (f x)
+    fmap _ (Branch x y) = Branch x y
+
+instance Binary a => Binary (Node a) where
+    put Branch{..} = put (1 :: Int) >> put eps >> put edges
+    put Value{..}  = put (2 :: Int) >> put unValue
+    get = do
+        x <- get :: Get Int
+        case x of
+            1 -> Branch <$> get <*> get
+            _ -> Value <$> get
 
 -- | Identifier of the child determined by the given character.
 onChar :: Char -> Node a -> Maybe Id
@@ -92,13 +98,13 @@ data Graph a = Graph {
     , ingoMap   :: !(IM.IntMap Int) }
     deriving (Show, Eq, Ord)
 
--- instance (Ord a, Binary a) => Binary (Graph a) where
---     put Graph{..} = do
---     	put idMap
--- 	put freeIDs
--- 	put nodeMap
--- 	put ingoMap
---     get = Graph <$> get <*> get <*> get <*> get
+instance (Ord a, Binary a) => Binary (Graph a) where
+    put Graph{..} = do
+    	put idMap
+	put freeIDs
+	put nodeMap
+	put ingoMap
+    get = Graph <$> get <*> get <*> get <*> get
 
 -- | Empty graph.
 empty :: Graph a

@@ -8,11 +8,11 @@ module Data.DAWG
 , empty
 , numStates
 , insert
--- , insertWith
--- , delete
+, insertWith
+, delete
 , lookup
 , fromList
--- , fromListWith
+, fromListWith
 , fromLang
 ) where
 
@@ -67,37 +67,42 @@ insertM [] y i = do
     j <- insertNode (G.Value $ Just y)
     insertNode (n { G.eps = j })
 
--- insertWithM :: Ord a => (a -> a -> a) -> String -> a -> Id -> GraphM a Id
--- insertWithM f [] y i = do
---     n <- nodeBy i
---     deleteNode n
---     case G.value n of
---         Just y' ->
---             let y'' = f y y'
---             in  y'' `seq` insertNode (n { G.value = Just y'' })
---         Nothing -> insertNode (n { G.value = Just y })
--- insertWithM f (x:xs) y i = do
---     n <- nodeBy i
---     j <- case G.onChar x n of
---         Just j  -> return j
---         Nothing -> insertNode leaf
---     k <- insertWithM f xs y j
---     deleteNode n
---     insertNode (G.subst x k n)
+insertWithM :: Ord a => (a -> a -> a) -> String -> a -> Id -> GraphM a Id
+insertWithM f (x:xs) y i = do
+    n <- nodeBy i
+    j <- case G.onChar x n of
+        Just j  -> return j
+        Nothing -> insertLeaf
+    k <- insertWithM f xs y j
+    deleteNode n
+    insertNode (G.subst x k n)
+insertWithM f [] y i = do
+    n <- nodeBy i
+    w <- nodeBy (G.eps n)
+    deleteNode w
+    deleteNode n
+    let y'new = case G.unValue w of
+            Just y' -> f y y'
+            Nothing -> y
+    j <- insertNode (G.Value $ Just y'new)
+    insertNode (n { G.eps = j })
 
--- deleteM :: Ord a => String -> Id -> GraphM a Id
--- deleteM [] i = do
---     n <- nodeBy i
---     deleteNode n
---     insertNode (n { G.value = Nothing })
--- deleteM (x:xs) i = do
---     n <- nodeBy i
---     case G.onChar x n of
---         Nothing -> return i
---         Just j  -> do
---             k <- deleteM xs j
---             deleteNode n
---             insertNode (G.subst x k n)
+deleteM :: Ord a => String -> Id -> GraphM a Id
+deleteM (x:xs) i = do
+    n <- nodeBy i
+    case G.onChar x n of
+        Nothing -> return i
+        Just j  -> do
+            k <- deleteM xs j
+            deleteNode n
+            insertNode (G.subst x k n)
+deleteM [] i = do
+    n <- nodeBy i
+    w <- nodeBy (G.eps n)
+    deleteNode w
+    deleteNode n
+    j <- insertLeaf
+    insertNode (n { G.eps = j })
     
 lookupM :: String -> Id -> GraphM a (Maybe a)
 lookupM [] i = do
@@ -116,11 +121,11 @@ data DAWG a = DAWG
     , root  :: !Id }
     deriving (Show, Eq, Ord)
 
--- instance (Ord a, Binary a) => Binary (DAWG a) where
---     put d = do
---         put (graph d)
---         put (root d)
---     get = DAWG <$> get <*> get
+instance (Ord a, Binary a) => Binary (DAWG a) where
+    put d = do
+        put (graph d)
+        put (root d)
+    get = DAWG <$> get <*> get
 
 -- | Empty DAWG.
 empty :: Ord a => DAWG a
@@ -138,20 +143,20 @@ insert xs y d =
     let (i, g) = S.runState (insertM xs y $ root d) (graph d)
     in  DAWG g i
 
--- -- | Insert with a function, combining new value and old value.
--- -- 'insertWith' f key value d will insert the pair (key, value) into d if
--- -- key does not exist in the DAWG. If the key does exist, the function
--- -- will insert the pair (key, f new_value old_value).
--- insertWith :: Ord a => (a -> a -> a) -> String -> a -> DAWG a -> DAWG a
--- insertWith f xs y d =
---     let (i, g) = S.runState (insertWithM f xs y $ root d) (graph d)
---     in  DAWG g i
--- 
--- -- | Delete the key from the DAWG.
--- delete :: Ord a => String -> DAWG a -> DAWG a
--- delete xs d =
---     let (i, g) = S.runState (deleteM xs $ root d) (graph d)
---     in  DAWG g i
+-- | Insert with a function, combining new value and old value.
+-- 'insertWith' f key value d will insert the pair (key, value) into d if
+-- key does not exist in the DAWG. If the key does exist, the function
+-- will insert the pair (key, f new_value old_value).
+insertWith :: Ord a => (a -> a -> a) -> String -> a -> DAWG a -> DAWG a
+insertWith f xs y d =
+    let (i, g) = S.runState (insertWithM f xs y $ root d) (graph d)
+    in  DAWG g i
+
+-- | Delete the key from the DAWG.
+delete :: Ord a => String -> DAWG a -> DAWG a
+delete xs d =
+    let (i, g) = S.runState (deleteM xs $ root d) (graph d)
+    in  DAWG g i
 
 -- | Find value associated with the key.
 lookup :: String -> DAWG a -> Maybe a
@@ -163,13 +168,13 @@ fromList xs =
     let update t (x, v) = insert x v t
     in  foldl' update empty xs
 
--- -- | Construct DAWG from the list of (word, value) pairs
--- -- with a combining function.  The combining function is
--- -- applied strictly.
--- fromListWith :: Ord a => (a -> a -> a) -> [(String, a)] -> DAWG a
--- fromListWith f xs =
---     let update t (x, v) = insertWith f x v t
---     in  foldl' update empty xs
+-- | Construct DAWG from the list of (word, value) pairs
+-- with a combining function.  The combining function is
+-- applied strictly.
+fromListWith :: Ord a => (a -> a -> a) -> [(String, a)] -> DAWG a
+fromListWith f xs =
+    let update t (x, v) = insertWith f x v t
+    in  foldl' update empty xs
 
 -- | Make DAWG from the list of words.  Annotate each word with
 -- the @()@ value.
