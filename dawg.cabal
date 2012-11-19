@@ -3,11 +3,7 @@ version:            0.4.0
 synopsis:           Directed acyclic word graphs
 description:
     The library implements /directed acyclic word graphs/ (DAWGs), which can
-    be also interpreted as /minimal acyclic finite-state automata/. 
-    .
-    In most cases you can use the "Data.DAWG" module which provides the basic
-    implementation of DAWGs.  If values have substantial memory footprint
-    consider using the "Data.DAWG.Wrapper" module instead.
+    be also interpreted as /minimal acyclic finite-state automata/.
 license:            BSD3
 license-file:       LICENSE
 cabal-version:      >= 1.6
@@ -27,11 +23,9 @@ library
       , vector
       , vector-binary
       , mtl
-      , monad-codec >= 0.2 && < 0.3
 
     exposed-modules:
         Data.DAWG
---       , Data.DAWG.Wrapper
       , Data.DAWG.Graph
       , Data.DAWG.VMap
 
