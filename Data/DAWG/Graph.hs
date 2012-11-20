@@ -10,6 +10,7 @@ module Data.DAWG.Graph
 -- * Node
   Node (..)
 , Id
+, edges
 , onChar
 , subst
 -- * Graph
@@ -39,11 +40,11 @@ type Id = Int
 -- edges.
 --
 -- Invariant: the 'value' identifier always points to the 'Value' node.
--- 'edges', on the other hand, point to 'Branch' nodes.
+-- Edges in the 'edgeMap', on the other hand, point to 'Branch' nodes.
 data Node a
     = Branch
-        { eps   :: {-# UNPACK #-} !Id
-        , edges :: !(V.VMap Id) }
+        { eps       :: {-# UNPACK #-} !Id
+        , edgeMap   :: !(V.VMap Id) }
     | Value
         { unValue :: !a }
     deriving (Show, Eq, Ord)
@@ -53,13 +54,18 @@ instance Functor Node where
     fmap _ (Branch x y) = Branch x y
 
 instance Binary a => Binary (Node a) where
-    put Branch{..} = put (1 :: Int) >> put eps >> put edges
+    put Branch{..} = put (1 :: Int) >> put eps >> put edgeMap
     put Value{..}  = put (2 :: Int) >> put unValue
     get = do
         x <- get :: Get Int
         case x of
             1 -> Branch <$> get <*> get
             _ -> Value <$> get
+
+-- | List of non-epsilon edges outgoing from the 'Branch' node.
+edges :: Node a -> [(Char, Id)]
+edges (Branch _ es)     = V.toList es
+edges (Value _)         = error "edges: value node"
 
 -- | Identifier of the child determined by the given character.
 onChar :: Char -> Node a -> Maybe Id

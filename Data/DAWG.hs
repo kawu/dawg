@@ -4,13 +4,23 @@
 -- which can be used to build the DAWG structure incrementaly.
 
 module Data.DAWG
-( DAWG (..)
-, empty
+(
+-- * DAWG type
+  DAWG (..)
+-- * Query
 , numStates
+, lookup
+-- * Construction
+, empty
+-- ** Insertion
 , insert
 , insertWith
+-- ** Deletion
 , delete
-, lookup
+-- * Conversion
+, elems
+, keys
+, assocs
 , fromList
 , fromListWith
 , fromLang
@@ -18,6 +28,7 @@ module Data.DAWG
 
 import Prelude hiding (lookup)
 import Control.Applicative ((<$>), (<*>))
+import Control.Arrow (first)
 import Data.List (foldl')
 import Data.Binary (Binary, put, get)
 import qualified Control.Monad.State.Strict as S
@@ -26,7 +37,7 @@ import Data.DAWG.Graph (Id, Node, Graph)
 import qualified Data.DAWG.Graph as G
 import qualified Data.DAWG.VMap as V
 
-type GraphM a b = S.State (Graph (Maybe a)) b
+type GraphM a b = S.State  (Graph (Maybe a)) b
 
 mkState :: (Graph a -> Graph a) -> Graph a -> ((), Graph a)
 mkState f g = ((), f g)
@@ -114,6 +125,17 @@ lookupM (x:xs) i = do
         Just j  -> lookupM xs j
         Nothing -> return Nothing
 
+assocsAcc :: Graph (Maybe a) -> Id -> [(String, a)]
+assocsAcc g i =
+    here w ++ concatMap there (G.edges n)
+  where
+    n = G.nodeBy i g
+    w = G.nodeBy (G.eps n) g
+    here v = case G.unValue v of
+        Just x  -> [("", x)]
+        Nothing -> []
+    there (char, j) = map (first (char:)) (assocsAcc g j)
+
 -- | A 'G.Graph' with one root from which all other graph nodes should
 -- be accesible.
 data DAWG a = DAWG
@@ -161,6 +183,18 @@ delete xs d =
 -- | Find value associated with the key.
 lookup :: String -> DAWG a -> Maybe a
 lookup xs d = S.evalState (lookupM xs $ root d) (graph d)
+
+-- | Return all keys of the DAWG in ascending order.
+keys :: DAWG a -> [String]
+keys = map fst . assocs
+
+-- | Return all elements of the DAWG in the ascending order of their keys.
+elems :: DAWG a -> [a]
+elems = map snd . assocs
+
+-- | Return all key/value pairs in the DAWG in ascending key order.
+assocs :: DAWG a -> [(String, a)]
+assocs d = assocsAcc (graph d) (root d)
 
 -- | Construct DAWG from the list of (word, value) pairs.
 fromList :: Ord a => [(String, a)] -> DAWG a
