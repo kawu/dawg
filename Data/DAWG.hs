@@ -1,4 +1,4 @@
--- | The module implements of /directed acyclic word graphs/ (DAWGs) internaly
+-- | The module implements /directed acyclic word graphs/ (DAWGs) internaly
 -- represented as /minimal acyclic deterministic finite-state automata/.
 -- The implementation provides fast insert and delete operations
 -- which can be used to build the DAWG structure incrementaly.

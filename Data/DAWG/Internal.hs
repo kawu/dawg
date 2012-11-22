@@ -1,11 +1,8 @@
 {-# LANGUAGE RecordWildCards #-}
 
--- | The module provides a representation of a tree where all equivalent nodes
--- (i.e. roots of trees equal with respect to the '==' function) are compressed
--- to one /minimal acyclic deterministic finite-state automaton/ state with
--- unique identifier.
--- Names in this module correspond to a graphical representation of automaton:
--- nodes refer to states and edges refer to transitions.
+-- | Internal representation of the "Data.DAWG" automaton.  Names in this
+-- module correspond to a graphical representation of automaton: nodes refer
+-- to states and edges refer to transitions.
 
 module Data.DAWG.Internal
 ( 

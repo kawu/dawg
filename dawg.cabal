@@ -28,6 +28,7 @@ library
 
     exposed-modules:
         Data.DAWG
+      , Data.DAWG.Frozen
       , Data.DAWG.Internal
       , Data.DAWG.VMap
 
