@@ -28,7 +28,7 @@ library
 
     exposed-modules:
         Data.DAWG
-      , Data.DAWG.Graph
+      , Data.DAWG.Internal
       , Data.DAWG.VMap
 
     ghc-options: -Wall -O2

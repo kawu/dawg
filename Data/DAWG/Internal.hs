@@ -1,11 +1,13 @@
 {-# LANGUAGE RecordWildCards #-}
 
 -- | The module provides a representation of a tree where all equivalent nodes
--- (i.e. trees equal with respect to the '==' function) are compressed to one
--- /directed acyclic graph/ (DAG) node with unique identifier.  Alternatively,
--- it can be thought of as a /minimal acyclic finite-state automata/.
+-- (i.e. roots of trees equal with respect to the '==' function) are compressed
+-- to one /minimal acyclic deterministic finite-state automaton/ state with
+-- unique identifier.
+-- Names in this module correspond to a graphical representation of automaton:
+-- nodes refer to states and edges refer to transitions.
 
-module Data.DAWG.Graph
+module Data.DAWG.Internal
 ( 
 -- * Node
   Node (..)
@@ -39,11 +41,18 @@ type Id = Int
 -- iff they are equal with respect to their values and outgoing
 -- edges.
 --
+-- Since 'Value' nodes are distinguished from 'Branch' nodes, two values
+-- equal with respect to '==' function are always kept in one 'Value'
+-- node in the graph.  It doesn't change the fact that to all 'Branch'
+-- nodes one value is assigned through the epsilon transition.
+--
 -- Invariant: the 'value' identifier always points to the 'Value' node.
 -- Edges in the 'edgeMap', on the other hand, point to 'Branch' nodes.
 data Node a
-    = Branch
-        { eps       :: {-# UNPACK #-} !Id
+    = Branch {
+        -- | Epsilon transition.
+          eps       :: {-# UNPACK #-} !Id
+        -- | Map from alphabet symbols to 'Branch' node identifiers.
         , edgeMap   :: !V.VMap }
     | Value
         { unValue :: !a }
@@ -67,13 +76,12 @@ edges :: Node a -> [(Int, Id)]
 edges (Branch _ es)     = V.toList es
 edges (Value _)         = error "edges: value node"
 
--- | Identifier of the child determined by the given character.
+-- | Identifier of the child determined by the given symbol.
 onChar :: Int -> Node a -> Maybe Id
 onChar x (Branch _ es)  = V.lookup x es
 onChar _ (Value _)      = error "onChar: value node"
 
--- | Substitue the identifier of the child determined by the given
--- character.
+-- | Substitue the identifier of the child determined by the given symbol.
 subst :: Int -> Id -> Node a -> Node a
 subst x i (Branch w es) = Branch w (V.insert x i es)
 subst _ _ (Value _)     = error "subst: value node"
@@ -88,7 +96,8 @@ subst _ _ (Value _)     = error "subst: value node"
 --
 -- where occupiedIDs = elemSet idMap.
 --
--- TODO: Is it possible to merge freeIDs with ingoMap to save some memory?
+-- TODO: Is it possible to merge 'freeIDs' with 'ingoMap' to reduce
+-- memory footprint?
 data Graph a = Graph {
     -- | Map from nodes to IDs.
       idMap     :: !(M.Map (Node a) Id)
@@ -155,7 +164,7 @@ remNode i Graph{..} =
 incIngo :: Id -> Graph a -> Graph a
 incIngo i g = g { ingoMap = IM.insertWith' (+) i 1 (ingoMap g) }
 
--- | Descrement the number of ingoing paths and return
+-- | Decrement the number of ingoing paths and return
 -- the resulting number.
 decIngo :: Id -> Graph a -> (Int, Graph a)
 decIngo i g =
@@ -164,9 +173,9 @@ decIngo i g =
 
 -- | Insert node into the graph.  If the node was already a member
 -- of the graph, just increase the number of ingoing paths.
--- NOTE: Number of ingoing paths will not be changed for any
--- ancestors of the node, so the operation alone will not ensure
--- that properties of the graph are preserved.
+-- NOTE: Number of ingoing paths will not be changed for any descendants
+-- of the node, so the operation alone will not ensure that properties
+-- of the graph are preserved.
 insert :: Ord a => Node a -> Graph a -> (Id, Graph a)
 insert n g = case M.lookup n (idMap g) of
     Just i  -> (i, incIngo i g)
@@ -176,7 +185,7 @@ insert n g = case M.lookup n (idMap g) of
 -- at multiple positions, just decrease the number of ingoing paths.
 -- NOTE: The function does not delete descendant nodes which may become
 -- inaccesible nor does it change the number of ingoing paths for any
--- ancestor of the node.
+-- descendant of the node.
 delete :: Ord a => Node a -> Graph a -> Graph a
 delete n g = if num == 0
     then remNode i g'

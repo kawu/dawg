@@ -33,8 +33,8 @@ import Data.List (foldl')
 import Data.Binary (Binary, put, get)
 import qualified Control.Monad.State.Strict as S
 
-import Data.DAWG.Graph (Id, Node, Graph)
-import qualified Data.DAWG.Graph as G
+import Data.DAWG.Internal (Id, Node, Graph)
+import qualified Data.DAWG.Internal as I
 import qualified Data.DAWG.VMap as V
 
 type GraphM a b = S.State (Graph (Maybe a)) b
@@ -45,98 +45,98 @@ mkState f g = ((), f g)
 -- | Leaf node with no children and 'Nothing' value.
 insertLeaf :: Ord a => GraphM a Id 
 insertLeaf = do
-    i <- insertNode (G.Value Nothing)
-    insertNode (G.Branch i V.empty)
+    i <- insertNode (I.Value Nothing)
+    insertNode (I.Branch i V.empty)
 
 -- | Return node with the given identifier.
 nodeBy :: Id -> GraphM a (Node (Maybe a))
-nodeBy i = G.nodeBy i <$> S.get
+nodeBy i = I.nodeBy i <$> S.get
 
--- Evaluate the 'G.insert' function within the monad.
+-- Evaluate the 'I.insert' function within the monad.
 insertNode :: Ord a => Node (Maybe a) -> GraphM a Id
-insertNode = S.state . G.insert
+insertNode = S.state . I.insert
 
--- Evaluate the 'G.delete' function within the monad.
+-- Evaluate the 'I.delete' function within the monad.
 deleteNode :: Ord a => Node (Maybe a) -> GraphM a ()
-deleteNode = S.state . mkState . G.delete
+deleteNode = S.state . mkState . I.delete
 
 -- | Invariant: the identifier points to the 'Branch' node.
 insertM :: Ord a => [Int] -> a -> Id -> GraphM a Id
 insertM (x:xs) y i = do
     n <- nodeBy i
-    j <- case G.onChar x n of
+    j <- case I.onChar x n of
         Just j  -> return j
         Nothing -> insertLeaf
     k <- insertM xs y j
     deleteNode n
-    insertNode (G.subst x k n)
+    insertNode (I.subst x k n)
 insertM [] y i = do
     n <- nodeBy i
-    w <- nodeBy (G.eps n)
+    w <- nodeBy (I.eps n)
     deleteNode w
     deleteNode n
-    j <- insertNode (G.Value $ Just y)
-    insertNode (n { G.eps = j })
+    j <- insertNode (I.Value $ Just y)
+    insertNode (n { I.eps = j })
 
 insertWithM :: Ord a => (a -> a -> a) -> [Int] -> a -> Id -> GraphM a Id
 insertWithM f (x:xs) y i = do
     n <- nodeBy i
-    j <- case G.onChar x n of
+    j <- case I.onChar x n of
         Just j  -> return j
         Nothing -> insertLeaf
     k <- insertWithM f xs y j
     deleteNode n
-    insertNode (G.subst x k n)
+    insertNode (I.subst x k n)
 insertWithM f [] y i = do
     n <- nodeBy i
-    w <- nodeBy (G.eps n)
+    w <- nodeBy (I.eps n)
     deleteNode w
     deleteNode n
-    let y'new = case G.unValue w of
+    let y'new = case I.unValue w of
             Just y' -> f y y'
             Nothing -> y
-    j <- insertNode (G.Value $ Just y'new)
-    insertNode (n { G.eps = j })
+    j <- insertNode (I.Value $ Just y'new)
+    insertNode (n { I.eps = j })
 
 deleteM :: Ord a => [Int] -> Id -> GraphM a Id
 deleteM (x:xs) i = do
     n <- nodeBy i
-    case G.onChar x n of
+    case I.onChar x n of
         Nothing -> return i
         Just j  -> do
             k <- deleteM xs j
             deleteNode n
-            insertNode (G.subst x k n)
+            insertNode (I.subst x k n)
 deleteM [] i = do
     n <- nodeBy i
-    w <- nodeBy (G.eps n)
+    w <- nodeBy (I.eps n)
     deleteNode w
     deleteNode n
     j <- insertLeaf
-    insertNode (n { G.eps = j })
+    insertNode (n { I.eps = j })
     
 lookupM :: [Int] -> Id -> GraphM a (Maybe a)
 lookupM [] i = do
-    j <- G.eps <$> nodeBy i
-    G.unValue <$> nodeBy j
+    j <- I.eps <$> nodeBy i
+    I.unValue <$> nodeBy j
 lookupM (x:xs) i = do
     n <- nodeBy i
-    case G.onChar x n of
+    case I.onChar x n of
         Just j  -> lookupM xs j
         Nothing -> return Nothing
 
 assocsAcc :: Graph (Maybe a) -> Id -> [([Int], a)]
 assocsAcc g i =
-    here w ++ concatMap there (G.edges n)
+    here w ++ concatMap there (I.edges n)
   where
-    n = G.nodeBy i g
-    w = G.nodeBy (G.eps n) g
-    here v = case G.unValue v of
+    n = I.nodeBy i g
+    w = I.nodeBy (I.eps n) g
+    here v = case I.unValue v of
         Just x  -> [([], x)]
         Nothing -> []
     there (char, j) = map (first (char:)) (assocsAcc g j)
 
--- | A 'G.Graph' with one root from which all other graph nodes should
+-- | A 'I.Graph' with one root from which all other graph nodes should
 -- be accesible.  Parameter @a@ is a phantom parameter and it represents
 -- character type.
 data DAWG a b = DAWG
@@ -153,12 +153,12 @@ instance (Ord b, Binary b) => Binary (DAWG a b) where
 -- | Empty DAWG.
 empty :: Ord b => DAWG a b
 empty = 
-    let (i, g) = S.runState insertLeaf G.empty
+    let (i, g) = S.runState insertLeaf I.empty
     in  DAWG g i
 
 -- | Number of states in the underlying graph.
 numStates :: DAWG a b -> Int
-numStates = G.size . graph
+numStates = I.size . graph
 
 -- | Insert the (key, value) pair into the DAWG.
 insert :: (Enum a, Ord b) => [a] -> b -> DAWG a b -> DAWG a b
