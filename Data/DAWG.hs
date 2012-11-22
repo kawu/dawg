@@ -1,5 +1,5 @@
--- | The module provides implementation of /directed acyclic word graphs/
--- (DAWGs) also known as /minimal acyclic finite-state automata/.
+-- | The module implements of /directed acyclic word graphs/ (DAWGs) internaly
+-- represented as /minimal acyclic deterministic finite-state automata/.
 -- The implementation provides fast insert and delete operations
 -- which can be used to build the DAWG structure incrementaly.
 
@@ -37,7 +37,7 @@ import Data.DAWG.Graph (Id, Node, Graph)
 import qualified Data.DAWG.Graph as G
 import qualified Data.DAWG.VMap as V
 
-type GraphM a b = S.State  (Graph (Maybe a)) b
+type GraphM a b = S.State (Graph (Maybe a)) b
 
 mkState :: (Graph a -> Graph a) -> Graph a -> ((), Graph a)
 mkState f g = ((), f g)
@@ -61,7 +61,7 @@ deleteNode :: Ord a => Node (Maybe a) -> GraphM a ()
 deleteNode = S.state . mkState . G.delete
 
 -- | Invariant: the identifier points to the 'Branch' node.
-insertM :: Ord a => String -> a -> Id -> GraphM a Id
+insertM :: Ord a => [Int] -> a -> Id -> GraphM a Id
 insertM (x:xs) y i = do
     n <- nodeBy i
     j <- case G.onChar x n of
@@ -78,7 +78,7 @@ insertM [] y i = do
     j <- insertNode (G.Value $ Just y)
     insertNode (n { G.eps = j })
 
-insertWithM :: Ord a => (a -> a -> a) -> String -> a -> Id -> GraphM a Id
+insertWithM :: Ord a => (a -> a -> a) -> [Int] -> a -> Id -> GraphM a Id
 insertWithM f (x:xs) y i = do
     n <- nodeBy i
     j <- case G.onChar x n of
@@ -98,7 +98,7 @@ insertWithM f [] y i = do
     j <- insertNode (G.Value $ Just y'new)
     insertNode (n { G.eps = j })
 
-deleteM :: Ord a => String -> Id -> GraphM a Id
+deleteM :: Ord a => [Int] -> Id -> GraphM a Id
 deleteM (x:xs) i = do
     n <- nodeBy i
     case G.onChar x n of
@@ -115,7 +115,7 @@ deleteM [] i = do
     j <- insertLeaf
     insertNode (n { G.eps = j })
     
-lookupM :: String -> Id -> GraphM a (Maybe a)
+lookupM :: [Int] -> Id -> GraphM a (Maybe a)
 lookupM [] i = do
     j <- G.eps <$> nodeBy i
     G.unValue <$> nodeBy j
@@ -125,92 +125,115 @@ lookupM (x:xs) i = do
         Just j  -> lookupM xs j
         Nothing -> return Nothing
 
-assocsAcc :: Graph (Maybe a) -> Id -> [(String, a)]
+assocsAcc :: Graph (Maybe a) -> Id -> [([Int], a)]
 assocsAcc g i =
     here w ++ concatMap there (G.edges n)
   where
     n = G.nodeBy i g
     w = G.nodeBy (G.eps n) g
     here v = case G.unValue v of
-        Just x  -> [("", x)]
+        Just x  -> [([], x)]
         Nothing -> []
     there (char, j) = map (first (char:)) (assocsAcc g j)
 
 -- | A 'G.Graph' with one root from which all other graph nodes should
--- be accesible.
-data DAWG a = DAWG
-    { graph :: !(Graph (Maybe a))
+-- be accesible.  Parameter @a@ is a phantom parameter and it represents
+-- character type.
+data DAWG a b = DAWG
+    { graph :: !(Graph (Maybe b))
     , root  :: !Id }
     deriving (Show, Eq, Ord)
 
-instance (Ord a, Binary a) => Binary (DAWG a) where
+instance (Ord b, Binary b) => Binary (DAWG a b) where
     put d = do
         put (graph d)
         put (root d)
     get = DAWG <$> get <*> get
 
 -- | Empty DAWG.
-empty :: Ord a => DAWG a
+empty :: Ord b => DAWG a b
 empty = 
     let (i, g) = S.runState insertLeaf G.empty
     in  DAWG g i
 
 -- | Number of states in the underlying graph.
-numStates :: DAWG a -> Int
+numStates :: DAWG a b -> Int
 numStates = G.size . graph
 
 -- | Insert the (key, value) pair into the DAWG.
-insert :: Ord a => String -> a -> DAWG a -> DAWG a
-insert xs y d =
-    let (i, g) = S.runState (insertM xs y $ root d) (graph d)
+insert :: (Enum a, Ord b) => [a] -> b -> DAWG a b -> DAWG a b
+insert xs' y d =
+    let xs = map fromEnum xs'
+        (i, g) = S.runState (insertM xs y $ root d) (graph d)
     in  DAWG g i
+{-# SPECIALIZE insert :: Ord b => String -> b -> DAWG Char b -> DAWG Char b #-}
 
 -- | Insert with a function, combining new value and old value.
 -- 'insertWith' f key value d will insert the pair (key, value) into d if
 -- key does not exist in the DAWG. If the key does exist, the function
 -- will insert the pair (key, f new_value old_value).
-insertWith :: Ord a => (a -> a -> a) -> String -> a -> DAWG a -> DAWG a
-insertWith f xs y d =
-    let (i, g) = S.runState (insertWithM f xs y $ root d) (graph d)
+insertWith
+    :: (Enum a, Ord b) => (b -> b -> b)
+    -> [a] -> b -> DAWG a b -> DAWG a b
+insertWith f xs' y d =
+    let xs = map fromEnum xs'
+        (i, g) = S.runState (insertWithM f xs y $ root d) (graph d)
     in  DAWG g i
+{-# SPECIALIZE insertWith
+        :: Ord b => (b -> b -> b) -> String -> b
+        -> DAWG Char b -> DAWG Char b #-}
 
 -- | Delete the key from the DAWG.
-delete :: Ord a => String -> DAWG a -> DAWG a
-delete xs d =
-    let (i, g) = S.runState (deleteM xs $ root d) (graph d)
+delete :: (Enum a, Ord b) => [a] -> DAWG a b -> DAWG a b
+delete xs' d =
+    let xs = map fromEnum xs'
+        (i, g) = S.runState (deleteM xs $ root d) (graph d)
     in  DAWG g i
+{-# SPECIALIZE delete :: Ord b => String -> DAWG Char b -> DAWG Char b #-}
 
 -- | Find value associated with the key.
-lookup :: String -> DAWG a -> Maybe a
-lookup xs d = S.evalState (lookupM xs $ root d) (graph d)
+lookup :: Enum a => [a] -> DAWG a b -> Maybe b
+lookup xs' d =
+    let xs = map fromEnum xs'
+    in  S.evalState (lookupM xs $ root d) (graph d)
+{-# SPECIALIZE lookup :: String -> DAWG Char b -> Maybe b #-}
 
 -- | Return all keys of the DAWG in ascending order.
-keys :: DAWG a -> [String]
+keys :: Enum a => DAWG a b -> [[a]]
 keys = map fst . assocs
+{-# SPECIALIZE keys :: DAWG Char b -> [String] #-}
 
 -- | Return all elements of the DAWG in the ascending order of their keys.
-elems :: DAWG a -> [a]
+elems :: Enum a => DAWG a b -> [b]
 elems = map snd . assocs
+{-# SPECIALIZE elems :: DAWG Char b -> [b] #-}
 
 -- | Return all key/value pairs in the DAWG in ascending key order.
-assocs :: DAWG a -> [(String, a)]
-assocs d = assocsAcc (graph d) (root d)
+assocs :: Enum a => DAWG a b -> [([a], b)]
+assocs d
+    = map (first (map toEnum))
+    $ assocsAcc (graph d) (root d)
+{-# SPECIALIZE assocs :: DAWG Char b -> [(String, b)] #-}
 
 -- | Construct DAWG from the list of (word, value) pairs.
-fromList :: Ord a => [(String, a)] -> DAWG a
+fromList :: (Enum a, Ord b) => [([a], b)] -> DAWG a b
 fromList xs =
     let update t (x, v) = insert x v t
     in  foldl' update empty xs
+{-# SPECIALIZE fromList :: Ord b => [(String, b)] -> DAWG Char b #-}
 
 -- | Construct DAWG from the list of (word, value) pairs
 -- with a combining function.  The combining function is
 -- applied strictly.
-fromListWith :: Ord a => (a -> a -> a) -> [(String, a)] -> DAWG a
+fromListWith :: (Enum a, Ord b) => (b -> b -> b) -> [([a], b)] -> DAWG a b
 fromListWith f xs =
     let update t (x, v) = insertWith f x v t
     in  foldl' update empty xs
+{-# SPECIALIZE fromListWith :: Ord b => (b -> b -> b)
+        -> [(String, b)] -> DAWG Char b #-}
 
 -- | Make DAWG from the list of words.  Annotate each word with
 -- the @()@ value.
-fromLang :: [String] -> DAWG ()
+fromLang :: Enum a => [[a]] -> DAWG a ()
 fromLang xs = fromList [(x, ()) | x <- xs]
+{-# SPECIALIZE fromLang :: [String] -> DAWG Char () #-}

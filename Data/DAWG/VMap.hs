@@ -18,27 +18,27 @@ import qualified Data.Vector.Unboxed as U
 
 -- | A strictly ascending vector of distinct elements with respect
 -- to 'fst' values.
-newtype VMap a = VMap { unVMap :: U.Vector (Char, a) }
+newtype VMap = VMap { unVMap :: U.Vector (Int, Int) }
     deriving (Show, Eq, Ord)
 
-instance (Binary a, U.Unbox a) => Binary (VMap a) where
+instance Binary VMap where
     put v = put (unVMap v)
     get = VMap <$> get
 
 -- | Empty map.
-empty :: U.Unbox a => VMap a
+empty :: VMap
 empty = VMap U.empty
 {-# INLINE empty #-}
 
 -- | Lookup the character in the map.
-lookup :: U.Unbox a => Char -> VMap a -> Maybe a
+lookup :: Int -> VMap -> Maybe Int
 lookup x = fmap snd . U.find ((==x) . fst) . unVMap
 {-# INLINE lookup #-}
 
 -- | Insert the character/value pair into the map.
 -- TODO: Optimize!  Use the invariant, that VMap is
 -- kept in an ascending vector.
-insert :: U.Unbox a => Char -> a -> VMap a -> VMap a
+insert :: Int -> Int -> VMap -> VMap
 insert x y
     = VMap . U.fromList . M.toAscList
     . M.insert x y
@@ -47,11 +47,11 @@ insert x y
 
 -- | Smart 'VMap' constructor which ensures that the underlying vector is
 -- strictly ascending with respect to 'fst' values.
-fromList :: U.Unbox a => [(Char, a)] -> VMap a
+fromList :: [(Int, Int)] -> VMap
 fromList = VMap . U.fromList . M.toAscList  . M.fromList 
 {-# INLINE fromList #-}
 
 -- | Convert the 'VMap' to a list of ascending character/value pairs.
-toList :: U.Unbox a => VMap a -> [(Char, a)]
+toList :: VMap -> [(Int, Int)]
 toList = U.toList . unVMap
 {-# INLINE toList #-}

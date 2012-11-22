@@ -44,7 +44,7 @@ type Id = Int
 data Node a
     = Branch
         { eps       :: {-# UNPACK #-} !Id
-        , edgeMap   :: !(V.VMap Id) }
+        , edgeMap   :: !V.VMap }
     | Value
         { unValue :: !a }
     deriving (Show, Eq, Ord)
@@ -63,18 +63,18 @@ instance Binary a => Binary (Node a) where
             _ -> Value <$> get
 
 -- | List of non-epsilon edges outgoing from the 'Branch' node.
-edges :: Node a -> [(Char, Id)]
+edges :: Node a -> [(Int, Id)]
 edges (Branch _ es)     = V.toList es
 edges (Value _)         = error "edges: value node"
 
 -- | Identifier of the child determined by the given character.
-onChar :: Char -> Node a -> Maybe Id
+onChar :: Int -> Node a -> Maybe Id
 onChar x (Branch _ es)  = V.lookup x es
 onChar _ (Value _)      = error "onChar: value node"
 
 -- | Substitue the identifier of the child determined by the given
 -- character.
-subst :: Char -> Id -> Node a -> Node a
+subst :: Int -> Id -> Node a -> Node a
 subst x i (Branch w es) = Branch w (V.insert x i es)
 subst _ _ (Value _)     = error "subst: value node"
 
