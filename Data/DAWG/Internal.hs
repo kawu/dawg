@@ -10,7 +10,7 @@ module Data.DAWG.Internal
   Node (..)
 , Id
 , edges
-, onChar
+, onSym
 , subst
 -- * Graph
 , Graph (..)
@@ -74,9 +74,9 @@ edges (Branch _ es)     = V.toList es
 edges (Value _)         = error "edges: value node"
 
 -- | Identifier of the child determined by the given symbol.
-onChar :: Int -> Node a -> Maybe Id
-onChar x (Branch _ es)  = V.lookup x es
-onChar _ (Value _)      = error "onChar: value node"
+onSym :: Int -> Node a -> Maybe Id
+onSym x (Branch _ es) = V.lookup x es
+onSym _ (Value _)     = error "onSym: value node"
 
 -- | Substitue the identifier of the child determined by the given symbol.
 subst :: Int -> Id -> Node a -> Node a
@@ -94,7 +94,7 @@ subst _ _ (Value _)     = error "subst: value node"
 -- where occupiedIDs = elemSet idMap.
 --
 -- TODO: Is it possible to merge 'freeIDs' with 'ingoMap' to reduce
--- memory footprint?
+-- the memory footprint?
 data Graph a = Graph {
     -- | Map from nodes to IDs.
       idMap     :: !(M.Map (Node a) Id)

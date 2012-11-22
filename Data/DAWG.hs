@@ -64,7 +64,7 @@ deleteNode = S.state . mkState . I.delete
 insertM :: Ord a => [Int] -> a -> Id -> GraphM a Id
 insertM (x:xs) y i = do
     n <- nodeBy i
-    j <- case I.onChar x n of
+    j <- case I.onSym x n of
         Just j  -> return j
         Nothing -> insertLeaf
     k <- insertM xs y j
@@ -81,7 +81,7 @@ insertM [] y i = do
 insertWithM :: Ord a => (a -> a -> a) -> [Int] -> a -> Id -> GraphM a Id
 insertWithM f (x:xs) y i = do
     n <- nodeBy i
-    j <- case I.onChar x n of
+    j <- case I.onSym x n of
         Just j  -> return j
         Nothing -> insertLeaf
     k <- insertWithM f xs y j
@@ -101,7 +101,7 @@ insertWithM f [] y i = do
 deleteM :: Ord a => [Int] -> Id -> GraphM a Id
 deleteM (x:xs) i = do
     n <- nodeBy i
-    case I.onChar x n of
+    case I.onSym x n of
         Nothing -> return i
         Just j  -> do
             k <- deleteM xs j
@@ -121,7 +121,7 @@ lookupM [] i = do
     I.unValue <$> nodeBy j
 lookupM (x:xs) i = do
     n <- nodeBy i
-    case I.onChar x n of
+    case I.onSym x n of
         Just j  -> lookupM xs j
         Nothing -> return Nothing
 
@@ -137,7 +137,7 @@ assocsAcc g i =
     there (char, j) = map (first (char:)) (assocsAcc g j)
 
 -- | A 'I.Graph' with one root from which all other graph nodes should
--- be accesible.  Parameter @a@ is a phantom parameter and it represents
+-- be accesible.  Parameter @a@ is a phantom parameter which represents
 -- character type.
 data DAWG a b = DAWG
     { graph :: !(Graph (Maybe b))
