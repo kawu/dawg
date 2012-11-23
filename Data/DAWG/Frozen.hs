@@ -5,10 +5,10 @@
 --
 -- In comparison to "Data.DAWG" module the automaton implemented here:
 --
---   * Keeps all nodes in one array and thus uses much less memory,
+--   * Keeps all nodes in one array and therefore uses much less memory,
 --
---   * Constitutes a /perfect hash automaton/ which provides
---     'hash' and 'unHash' functions,
+--   * Constitutes a /perfect hash automaton/ with 'hash' and
+--     'unHash' functions,
 --
 --   * Doesn't provide insert/delete family of operations.
 
@@ -30,7 +30,7 @@ module Data.DAWG.Frozen
 , fromList
 , fromListWith
 , fromLang
--- * Converstion
+-- * Conversion
 , assocs
 , keys
 , elems
@@ -166,7 +166,7 @@ detSize d = V.fromList
             js = children n
         in  add (value n) (map mem js)
 
--- | Freeze the 'D.DAWG' version of automaton.
+-- | Yield immutable version of the automaton.
 freeze :: D.DAWG a b -> DAWG a b
 freeze d = detSize . V.fromList $
     map (stop . oldBy) (M.elems (inverse old2new))
