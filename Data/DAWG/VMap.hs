@@ -18,27 +18,27 @@ import qualified Data.Vector.Unboxed as U
 
 -- | A strictly ascending vector of distinct elements with respect
 -- to 'fst' values.
-newtype VMap = VMap { unVMap :: U.Vector (Int, Int) }
+newtype VMap a = VMap { unVMap :: U.Vector (Int, a) }
     deriving (Show, Eq, Ord)
 
-instance Binary VMap where
+instance (Binary a, U.Unbox a) => Binary (VMap a) where
     put v = put (unVMap v)
     get = VMap <$> get
 
 -- | Empty map.
-empty :: VMap
+empty :: U.Unbox a => VMap a
 empty = VMap U.empty
 {-# INLINE empty #-}
 
 -- | Lookup the character in the map.
-lookup :: Int -> VMap -> Maybe Int
+lookup :: U.Unbox a => Int -> VMap a -> Maybe a
 lookup x = fmap snd . U.find ((==x) . fst) . unVMap
 {-# INLINE lookup #-}
 
 -- | Insert the character/value pair into the map.
--- TODO: Optimize!  Use the invariant, that VMap is
+-- TODO: Optimize! Use the invariant, that VMap is
 -- kept in an ascending vector.
-insert :: Int -> Int -> VMap -> VMap
+insert :: U.Unbox a => Int -> a -> VMap a -> VMap a
 insert x y
     = VMap . U.fromList . M.toAscList
     . M.insert x y
@@ -47,11 +47,11 @@ insert x y
 
 -- | Smart 'VMap' constructor which ensures that the underlying vector is
 -- strictly ascending with respect to 'fst' values.
-fromList :: [(Int, Int)] -> VMap
-fromList = VMap . U.fromList . M.toAscList  . M.fromList 
+fromList :: U.Unbox a => [(Int, a)] -> VMap a
+fromList = VMap . U.fromList . M.toAscList . M.fromList
 {-# INLINE fromList #-}
 
 -- | Convert the 'VMap' to a list of ascending character/value pairs.
-toList :: VMap -> [(Int, Int)]
+toList :: U.Unbox a => VMap a -> [(Int, a)]
 toList = U.toList . unVMap
 {-# INLINE toList #-}

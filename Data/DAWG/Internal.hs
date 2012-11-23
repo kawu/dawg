@@ -50,7 +50,7 @@ data Node a
         -- | Epsilon transition.
           eps       :: {-# UNPACK #-} !Id
         -- | Map from alphabet symbols to 'Branch' node identifiers.
-        , edgeMap   :: !V.VMap }
+        , edgeMap   :: !(V.VMap Id) }
     | Value
         { unValue :: !a }
     deriving (Show, Eq, Ord)
