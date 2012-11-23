@@ -7,12 +7,12 @@
 --
 --   * Keeps all nodes in one array and therefore uses much less memory,
 --
---   * When 'weigh'ed, it constitutes a /static perfect hash automaton/
---     with 'hash' and 'unHash' functions,
+--   * When 'weigh'ed, it can be used to perform static hashing with
+--     'hash' and 'unHash' functions,
 --
 --   * Doesn't provide insert/delete family of operations.
 
-module Data.DAWG.Frozen
+module Data.DAWG.Static
 (
 -- * DAWG type
   DAWG (..)
@@ -22,7 +22,7 @@ module Data.DAWG.Frozen
 -- * Index
 , index
 , byIndex
--- ** Hashing
+-- * Hash
 , hash
 , unHash
 -- * Construction
@@ -30,7 +30,7 @@ module Data.DAWG.Frozen
 , fromList
 , fromListWith
 , fromLang
--- * Weights
+-- * Weight
 , Weight
 , weigh
 -- * Conversion
@@ -110,10 +110,9 @@ children :: Unbox b => Node a b -> [Id]
 children = map to . edges
 {-# INLINE children #-}
 
--- | @DAWG a b c@ constitutes an automaton with @a@ transition
--- symbols, @Maybe b@ values stored in nodes and edges labeled
--- with @c@ values.  Root is stored on the first position of
--- the array.
+-- | @DAWG a b c@ constitutes an automaton with alphabet symbols of type /a/,
+-- node values of type /Maybe b/ and additional transition labels of type /c/.
+-- Root is stored on the first position of the array.
 newtype DAWG a b c = DAWG { unDAWG :: V.Vector (Node (Maybe b) c) }
 
 -- | Empty DAWG.
@@ -188,17 +187,13 @@ fromLang :: Enum a => [[a]] -> DAWG a () ()
 fromLang = freeze . D.fromLang
 {-# SPECIALIZE fromLang :: [String] -> DAWG Char () () #-}
 
--- | Weight of the node corresponds to the number of final states
--- reachable from the node.  Weight of the edge is a sum of weights
+-- | Weight of a node corresponds to the number of final states
+-- reachable from the node.  Weight of an edge is a sum of weights
 -- of preceding nodes outgoing from the same parent node.
 type Weight = Int
 
--- | Recursively compute node weights and store corresponding values
--- in transition labels.
+-- | Compute node weights and store corresponding values in transition labels.
 weigh :: Unbox c => DAWG a b c -> DAWG a b Weight
--- weigh d = V.fromList
---     [ (nodeBy i d) { size = nodeWeight i }
---     | i <- [0 .. numStates d - 1] ]
 weigh d = (DAWG . V.fromList)
     [ Node (value n) (apply ws (trans n))
     | i <- [0 .. numStates d - 1]
