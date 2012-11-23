@@ -11,9 +11,6 @@
 --     'hash' and 'unHash' functions,
 --
 --   * Doesn't provide insert/delete family of operations.
---
--- Use the 'freeze' and 'thaw' functions to convert between both DAWG
--- representations.
 
 module Data.DAWG.Frozen
 (
@@ -22,6 +19,12 @@ module Data.DAWG.Frozen
 -- * Query
 , lookup
 , numStates
+-- * Index
+, index
+, byIndex
+-- ** Hashing
+, hash
+, unHash
 -- * Construction
 , empty
 , fromList
@@ -35,7 +38,7 @@ module Data.DAWG.Frozen
 ) where
 
 import Prelude hiding (lookup)
-import Control.Applicative (pure, (<$>), (<*>))
+import Control.Applicative (pure, (<$), (<$>), (<*>))
 import Control.Arrow (first, second)
 import Data.Binary (Binary, put, get)
 import Data.Vector.Binary ()
@@ -67,6 +70,14 @@ instance Binary a => Binary (Node a) where
 onSym :: Int -> Node a -> Maybe Id
 onSym x (Node _ _ es) = VM.lookup x es
 
+-- List of edges from the node.
+edgeList :: Node a -> [(Int, Id)]
+edgeList = VM.toList . edges
+
+-- | List children identifiers.
+children :: Node a -> [Id]
+children = map snd . edgeList
+
 -- | Root is stored on the first position of the array.
 type DAWG a b = V.Vector (Node (Maybe b))
 
@@ -82,18 +93,23 @@ numStates = V.length
 nodeBy :: Id -> DAWG a b -> Node (Maybe b)
 nodeBy i d = d V.! i
 
+-- | Find value associated with the key.
+lookup :: Enum a => [a] -> DAWG a b -> Maybe b
+lookup xs' =
+    let xs = map fromEnum xs'
+    in  lookup'I xs 0
+{-# SPECIALIZE lookup :: String -> DAWG Char b -> Maybe b #-}
+
 lookup'I :: [Int] -> Id -> DAWG a b -> Maybe b
 lookup'I []     i d = value (nodeBy i d)
 lookup'I (x:xs) i d = case onSym x (nodeBy i d) of
     Just j  -> lookup'I xs j d
     Nothing -> Nothing
 
--- | Find value associated with the key.
-lookup :: Enum a => [a] -> DAWG a b -> Maybe b
-lookup xs' d =
-    let xs = map fromEnum xs'
-    in  lookup'I xs 0 d
-{-# SPECIALIZE lookup :: String -> DAWG Char b -> Maybe b #-}
+-- | Return all key/value pairs in the DAWG in ascending key order.
+assocs :: Enum a => DAWG a b -> [([a], b)]
+assocs d = map (first (map toEnum)) (assocs'I 0 d)
+{-# SPECIALIZE assocs :: DAWG Char b -> [(String, b)] #-}
 
 assocs'I :: Id -> DAWG a b -> [([Int], b)]
 assocs'I i d =
@@ -104,11 +120,6 @@ assocs'I i d =
         Just x  -> [([], x)]
         Nothing -> []
     there (sym, j) = map (first (sym:)) (assocs'I j d)
-
--- | Return all key/value pairs in the DAWG in ascending key order.
-assocs :: Enum a => DAWG a b -> [([a], b)]
-assocs d = map (first (map toEnum)) (assocs'I 0 d)
-{-# SPECIALIZE assocs :: DAWG Char b -> [(String, b)] #-}
 
 -- | Return all keys of the DAWG in ascending order.
 keys :: Enum a => DAWG a b -> [[a]]
@@ -154,9 +165,8 @@ detSize d = V.fromList
         let n = nodeBy i d
             js = children n
         in  add (value n) (map mem js)
-    children = map snd . VM.toList . edges
 
--- | Freeze the "D.DAWG" version of automaton.
+-- | Freeze the 'D.DAWG' version of automaton.
 freeze :: D.DAWG a b -> DAWG a b
 freeze d = detSize . V.fromList $
     map (stop . oldBy) (M.elems (inverse old2new))
@@ -189,3 +199,69 @@ inverse =
     let swap (x, y) = (y, x)
     in  M.fromList . map swap . M.toList
 
+-- -- | Yield a 'D.DAWG' version of the automaton.
+-- thaw :: DAWG a b -> D.DAWG a b
+-- thaw d =
+--     D.DAWG graph 0
+--   where
+--     graph = I.Graph
+--         (Map.fromList $ zip nodes [0..])
+--         IS.empty
+--         (M.fromList   $ zip [0..] nodes)
+--         (
+
+-- | Position in a set of all dictionary entries with respect
+-- to the lexicographic order.
+index :: Enum a => [a] -> DAWG a b -> Maybe Int
+index xs = index'I (map fromEnum xs) 0
+{-# SPECIALIZE index :: String -> DAWG Char b -> Maybe Int #-}
+
+index'I :: [Int] -> Id -> DAWG a b -> Maybe Int
+index'I []     i d = 0 <$ value (nodeBy i d)
+index'I (x:xs) i d = case onSym x n of
+    Just j  -> do
+        x0 <- index'I xs j d
+        let x1 = maybe 0 (const 1) (value n)
+               + (sum . map sizeBy) (before (x, j))
+        return $ x0 + x1
+    Nothing -> Nothing
+  where
+    -- Current node.
+    n = nodeBy i d
+    -- Size of node by ID.
+    sizeBy = size . flip nodeBy d
+    -- All childresn IDs before the (x, j) edge.
+    before e = map snd . fst $ span (/=e) (edgeList n)
+
+-- | Perfect hashing function for dictionary entries.
+-- A synonym for the 'index' function.
+hash :: Enum a => [a] -> DAWG a b -> Maybe Int
+hash = index
+{-# INLINE hash #-}
+
+-- | Find dictionary entry given its index with respect to the
+-- lexicographic order.
+byIndex :: Enum a => Int -> DAWG a b -> Maybe [a]
+byIndex i d = map toEnum <$> byIndex'I i 0 d
+{-# SPECIALIZE byIndex :: Int -> DAWG Char b -> Maybe String #-}
+
+byIndex'I :: Int -> Id -> DAWG a b -> Maybe [Int]
+byIndex'I ix i d = do
+    (acc, x, j) <- findChild 0 (edgeList n)
+    xs <- byIndex'I (ix - acc) j d
+    return (x:xs)
+  where
+    -- Current node.
+    n   = nodeBy i d
+    -- Size of node by ID.
+    sizeBy = size . flip nodeBy d
+    -- Sum node size values and find the appropriate one.
+    findChild acc ((x, j) : js)
+        | acc < ix  = findChild (acc + sizeBy j) js
+        | otherwise = Just (acc, x, j)
+    findChild _ []  = Nothing
+
+-- | Inverse of the 'hash' function and a synonym for the 'byIndex' function.
+unHash :: Enum a => Int -> DAWG a b -> Maybe [a]
+unHash = byIndex
+{-# INLINE unHash #-}
