@@ -4,13 +4,14 @@ module Data.DAWG.VMap
 ( VMap (unVMap)
 , empty
 , lookup
+, firstLL
 , insert
 , fromList
 , toList
 ) where
 
 import Prelude hiding (lookup)
-import Control.Applicative ((<$>))
+import Control.Applicative ((<$>), (<|>))
 import Data.Binary (Binary, put, get)
 import Data.Vector.Binary ()
 import qualified Data.Map as M
@@ -34,6 +35,20 @@ empty = VMap U.empty
 lookup :: U.Unbox a => Int -> VMap a -> Maybe a
 lookup x = fmap snd . U.find ((==x) . fst) . unVMap
 {-# INLINE lookup #-}
+
+-- | Find the last element lower then the given value using the given
+-- function to determine element values.  Values of the function have
+-- to be ascending with respect to the order of elements in the map.
+-- Return the element together with corresponding may key.
+firstLL :: (U.Unbox a, Ord b) => (a -> b) -> b -> VMap a -> Maybe (Int, a)
+firstLL f x vm = do
+    k <-  U.findIndex ((>x) . f . snd) v
+      <|> if n > 0 then Just n else Nothing
+    return (v U.! (k - 1))
+  where
+    v = unVMap vm
+    n = U.length v
+{-# INLINE firstLL #-}
 
 -- | Insert the character/value pair into the map.
 -- TODO: Optimize! Use the invariant, that VMap is
