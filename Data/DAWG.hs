@@ -12,18 +12,18 @@ module Data.DAWG
 , lookup
 -- * Construction
 , empty
+, fromList
+, fromListWith
+, fromLang
 -- ** Insertion
 , insert
 , insertWith
 -- ** Deletion
 , delete
 -- * Conversion
-, elems
-, keys
 , assocs
-, fromList
-, fromListWith
-, fromLang
+, keys
+, elems
 ) where
 
 import Prelude hiding (lookup)
@@ -134,11 +134,11 @@ assocsAcc g i =
     here v = case I.unValue v of
         Just x  -> [([], x)]
         Nothing -> []
-    there (char, j) = map (first (char:)) (assocsAcc g j)
+    there (sym, j) = map (first (sym:)) (assocsAcc g j)
 
 -- | A 'I.Graph' with one root from which all other graph nodes should
 -- be accesible.  Parameter @a@ is a phantom parameter which represents
--- character type.
+-- symbol type.
 data DAWG a b = DAWG
     { graph :: !(Graph (Maybe b))
     , root  :: !Id }
@@ -198,22 +198,21 @@ lookup xs' d =
     in  S.evalState (lookupM xs $ root d) (graph d)
 {-# SPECIALIZE lookup :: String -> DAWG Char b -> Maybe b #-}
 
+-- | Return all key/value pairs in the DAWG in ascending key order.
+assocs :: Enum a => DAWG a b -> [([a], b)]
+assocs
+    = map (first (map toEnum))
+    . (assocsAcc <$> graph <*> root)
+{-# SPECIALIZE assocs :: DAWG Char b -> [(String, b)] #-}
+
 -- | Return all keys of the DAWG in ascending order.
 keys :: Enum a => DAWG a b -> [[a]]
 keys = map fst . assocs
 {-# SPECIALIZE keys :: DAWG Char b -> [String] #-}
 
 -- | Return all elements of the DAWG in the ascending order of their keys.
-elems :: Enum a => DAWG a b -> [b]
-elems = map snd . assocs
-{-# SPECIALIZE elems :: DAWG Char b -> [b] #-}
-
--- | Return all key/value pairs in the DAWG in ascending key order.
-assocs :: Enum a => DAWG a b -> [([a], b)]
-assocs d
-    = map (first (map toEnum))
-    $ assocsAcc (graph d) (root d)
-{-# SPECIALIZE assocs :: DAWG Char b -> [(String, b)] #-}
+elems :: DAWG a b -> [b]
+elems = map snd . (assocsAcc <$> graph <*> root)
 
 -- | Construct DAWG from the list of (word, value) pairs.
 fromList :: (Enum a, Ord b) => [([a], b)] -> DAWG a b
