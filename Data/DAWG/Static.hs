@@ -30,6 +30,7 @@ module Data.DAWG.Static
 , fromList
 , fromListWith
 , fromLang
+, freeze
 -- * Weight
 , Weight
 , weigh
@@ -37,7 +38,6 @@ module Data.DAWG.Static
 , assocs
 , keys
 , elems
-, freeze
 ) where
 
 import Prelude hiding (lookup)
@@ -215,7 +215,7 @@ weigh d = (DAWG . V.fromList)
         [ (x, annotate w e)
         | (w, (x, e)) <- zip ws ts ]
 
--- | Yield immutable version of the automaton.
+-- | Construct immutable version of the automaton.
 freeze :: D.DAWG a b -> DAWG a b ()
 freeze d = DAWG . V.fromList $
     map (stop . oldBy) (M.elems (inverse old2new))
@@ -300,9 +300,11 @@ byIndex'I ix i d
         | ix == 0   = [] <$ value (nodeBy i d)
         | otherwise = Nothing
     there = do
-        (x, e) <- VM.firstLL label (ix - v) (edgeMap n)
+        -- (x, e) <- VM.firstLL label (ix - v) (edgeMap n)
+        (x, e) <- VM.findLastLE cmp (edgeMap n)
         xs <- byIndex'I (ix - v - label e) (to e) d
         return (x:xs)
+    cmp e = compare (label e) (ix - v)
 
 -- | Inverse of the 'hash' function and a synonym for the 'byIndex' function.
 unHash :: Enum a => Int -> DAWG a b Weight -> Maybe [a]
