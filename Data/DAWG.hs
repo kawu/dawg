@@ -33,11 +33,15 @@ import Data.List (foldl')
 import Data.Binary (Binary, put, get)
 import qualified Control.Monad.State.Strict as S
 
-import Data.DAWG.Internal (ID, Node, Graph)
+import Data.DAWG.Internal (Graph)
+import Data.DAWG.Node2 hiding (Node)
+import qualified Data.DAWG.Node2 as N
 import qualified Data.DAWG.Internal as I
 import qualified Data.DAWG.VMap as V
 
 type GraphM a b = S.State (Graph (Maybe a)) b
+
+type Node a = N.Node (Maybe a)
 
 mkState :: (Graph a -> Graph a) -> Graph a -> ((), Graph a)
 mkState f g = ((), f g)
@@ -45,93 +49,93 @@ mkState f g = ((), f g)
 -- | Leaf node with no children and 'Nothing' value.
 insertLeaf :: Ord a => GraphM a ID 
 insertLeaf = do
-    i <- insertNode (I.Leaf Nothing)
-    insertNode (I.Branch i V.empty)
+    i <- insertNode (N.Leaf Nothing)
+    insertNode (N.Branch i V.empty)
 
 -- | Return node with the given identifier.
-nodeBy :: ID -> GraphM a (Node (Maybe a))
+nodeBy :: ID -> GraphM a (Node a)
 nodeBy i = I.nodeBy i <$> S.get
 
 -- Evaluate the 'I.insert' function within the monad.
-insertNode :: Ord a => Node (Maybe a) -> GraphM a ID
+insertNode :: Ord a => Node a -> GraphM a ID
 insertNode = S.state . I.insert
 
 -- Evaluate the 'I.delete' function within the monad.
-deleteNode :: Ord a => Node (Maybe a) -> GraphM a ()
+deleteNode :: Ord a => Node a -> GraphM a ()
 deleteNode = S.state . mkState . I.delete
 
 -- | Invariant: the identifier points to the 'Branch' node.
 insertM :: Ord a => [Int] -> a -> ID -> GraphM a ID
 insertM (x:xs) y i = do
     n <- nodeBy i
-    j <- case I.onSym x n of
+    j <- case onSym x n of
         Just j  -> return j
         Nothing -> insertLeaf
     k <- insertM xs y j
     deleteNode n
-    insertNode (I.subst x k n)
+    insertNode (subst x k n)
 insertM [] y i = do
     n <- nodeBy i
-    w <- nodeBy (I.eps n)
+    w <- nodeBy (N.eps n)
     deleteNode w
     deleteNode n
-    j <- insertNode (I.Leaf $ Just y)
-    insertNode (n { I.eps = j })
+    j <- insertNode (N.Leaf $ Just y)
+    insertNode (n { N.eps = j })
 
 insertWithM :: Ord a => (a -> a -> a) -> [Int] -> a -> ID -> GraphM a ID
 insertWithM f (x:xs) y i = do
     n <- nodeBy i
-    j <- case I.onSym x n of
+    j <- case onSym x n of
         Just j  -> return j
         Nothing -> insertLeaf
     k <- insertWithM f xs y j
     deleteNode n
-    insertNode (I.subst x k n)
+    insertNode (subst x k n)
 insertWithM f [] y i = do
     n <- nodeBy i
-    w <- nodeBy (I.eps n)
+    w <- nodeBy (N.eps n)
     deleteNode w
     deleteNode n
-    let y'new = case I.value w of
+    let y'new = case N.value w of
             Just y' -> f y y'
             Nothing -> y
-    j <- insertNode (I.Leaf $ Just y'new)
-    insertNode (n { I.eps = j })
+    j <- insertNode (N.Leaf $ Just y'new)
+    insertNode (n { N.eps = j })
 
 deleteM :: Ord a => [Int] -> ID -> GraphM a ID
 deleteM (x:xs) i = do
     n <- nodeBy i
-    case I.onSym x n of
+    case onSym x n of
         Nothing -> return i
         Just j  -> do
             k <- deleteM xs j
             deleteNode n
-            insertNode (I.subst x k n)
+            insertNode (subst x k n)
 deleteM [] i = do
     n <- nodeBy i
-    w <- nodeBy (I.eps n)
+    w <- nodeBy (N.eps n)
     deleteNode w
     deleteNode n
     j <- insertLeaf
-    insertNode (n { I.eps = j })
+    insertNode (n { N.eps = j })
     
 lookupM :: [Int] -> ID -> GraphM a (Maybe a)
 lookupM [] i = do
-    j <- I.eps <$> nodeBy i
-    I.value <$> nodeBy j
+    j <- N.eps <$> nodeBy i
+    N.value <$> nodeBy j
 lookupM (x:xs) i = do
     n <- nodeBy i
-    case I.onSym x n of
+    case onSym x n of
         Just j  -> lookupM xs j
         Nothing -> return Nothing
 
 assocsAcc :: Graph (Maybe a) -> ID -> [([Int], a)]
 assocsAcc g i =
-    here w ++ concatMap there (I.edges n)
+    here w ++ concatMap there (trans n)
   where
     n = I.nodeBy i g
-    w = I.nodeBy (I.eps n) g
-    here v = case I.value v of
+    w = I.nodeBy (N.eps n) g
+    here v = case N.value v of
         Just x  -> [([], x)]
         Nothing -> []
     there (sym, j) = map (first (sym:)) (assocsAcc g j)

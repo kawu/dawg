@@ -31,6 +31,8 @@ library
 
     exposed-modules:
         Data.DAWG
+      , Data.DAWG.Node
+      , Data.DAWG.Node2
       , Data.DAWG.Static
       , Data.DAWG.Internal
       , Data.DAWG.VMap

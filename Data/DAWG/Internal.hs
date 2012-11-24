@@ -6,16 +6,7 @@
 -- to states and edges refer to transitions.
 
 module Data.DAWG.Internal
-( 
--- * Node
-  Node (..)
-, ID
-, edges
-, children
-, onSym
-, subst
--- * Graph
-, Graph (..)
+( Graph (..)
 , empty
 , size
 , nodeBy
@@ -27,64 +18,17 @@ module Data.DAWG.Internal
 
 import Control.Applicative ((<$>), (<*>))
 import Data.List (foldl')
-import Data.Binary (Binary, Get, put, get)
+import Data.Binary (Binary, put, get)
 import qualified Data.Map as M
 import qualified Data.Tree as T
 import qualified Data.IntSet as IS
 import qualified Data.IntMap as IM
 import qualified Control.Monad.State.Strict as S
 
-import qualified Data.DAWG.VMap as V
+import Data.DAWG.Node2 hiding (Node)
+import qualified Data.DAWG.Node2 as N
 
--- | Node identifier.
-type ID = Int
-
--- | Two nodes (states) belong to the same equivalence class (and,
--- consequently, they must be represented as one node in the graph)
--- iff they are equal with respect to their values and outgoing
--- edges.
---
--- Since 'Leaf' nodes are distinguished from 'Branch' nodes, two values
--- equal with respect to '==' function are always kept in one 'Leaf'
--- node in the graph.  It doesn't change the fact that to all 'Branch'
--- nodes one value is assigned through the epsilon transition.
---
--- Invariant: the 'eps' identifier always points to the 'Leaf' node.
--- Edges in the 'edgeMap', on the other hand, point to 'Branch' nodes.
-data Node a
-    = Branch {
-        -- | Epsilon transition.
-          eps       :: {-# UNPACK #-} !ID
-        -- | Map from alphabet symbols to 'Branch' node identifiers.
-        , edgeMap   :: !(V.VMap ID) }
-    | Leaf { value  :: !a }
-    deriving (Show, Eq, Ord)
-
-instance Binary a => Binary (Node a) where
-    put Branch{..} = put (1 :: Int) >> put eps >> put edgeMap
-    put Leaf{..}   = put (2 :: Int) >> put value
-    get = do
-        x <- get :: Get Int
-        case x of
-            1 -> Branch <$> get <*> get
-            _ -> Leaf <$> get
-
--- | List of non-epsilon edges outgoing from the 'Branch' node.
-edges :: Node a -> [(Int, ID)]
-edges = V.toList . edgeMap
-
--- | List of 'Branch' children IDs.
-children :: Node a -> [ID]
-children = map snd . edges
-
--- | Identifier of the child determined by the given symbol.
-onSym :: Int -> Node a -> Maybe ID
-onSym x = V.lookup x . edgeMap
-
--- | Substitue the identifier of the child determined by the given symbol.
-subst :: Int -> ID -> Node a -> Node a
-subst x i (Branch w es) = Branch w (V.insert x i es)
-subst _ _ (Leaf _)      = error "subst: leaf node"
+type Node a = N.Node a
 
 -- | A set of nodes.  To every node a unique identifier is assigned.
 -- Invariants: 
@@ -210,7 +154,7 @@ fromNodes xs rootID = graph
     updIngo m i =
         let n = nodeBy i graph
             ingo = m IM.! i
-        in  foldl' (push ingo) m (children n)
+        in  foldl' (push ingo) m (edges n)
     push x m j = IM.adjust (+x) j m
 
 postorder :: T.Tree a -> [a] -> [a]
@@ -233,7 +177,7 @@ dfs g = prune . generate g
 generate :: Graph a -> ID -> T.Tree ID
 generate g i = T.Node i
     ( T.Node (eps n) []
-    : map (generate g) (children n) )
+    : map (generate g) (edges n) )
   where
     n           = nodeBy i g
 
