@@ -300,7 +300,6 @@ byIndex'I ix i d
         | ix == 0   = [] <$ value (nodeBy i d)
         | otherwise = Nothing
     there = do
-        -- (x, e) <- VM.firstLL label (ix - v) (edgeMap n)
         (x, e) <- VM.findLastLE cmp (edgeMap n)
         xs <- byIndex'I (ix - v - label e) (to e) d
         return (x:xs)
