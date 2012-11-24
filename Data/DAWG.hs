@@ -34,8 +34,8 @@ import Data.Binary (Binary, put, get)
 import qualified Control.Monad.State.Strict as S
 
 import Data.DAWG.Internal (Graph)
-import Data.DAWG.Node2 hiding (Node)
-import qualified Data.DAWG.Node2 as N
+import Data.DAWG.Node.Specialized hiding (Node)
+import qualified Data.DAWG.Node.Specialized as N
 import qualified Data.DAWG.Internal as I
 import qualified Data.DAWG.VMap as V
 
@@ -170,6 +170,7 @@ insert xs' y d =
     let xs = map fromEnum xs'
         (i, g) = S.runState (insertM xs y $ root d) (graph d)
     in  DAWG g i
+{-# INLINE insert #-}
 {-# SPECIALIZE insert :: Ord b => String -> b -> DAWG Char b -> DAWG Char b #-}
 
 -- | Insert with a function, combining new value and old value.
@@ -223,6 +224,7 @@ fromList :: (Enum a, Ord b) => [([a], b)] -> DAWG a b
 fromList xs =
     let update t (x, v) = insert x v t
     in  foldl' update empty xs
+{-# INLINE fromList #-}
 {-# SPECIALIZE fromList :: Ord b => [(String, b)] -> DAWG Char b #-}
 
 -- | Construct DAWG from the list of (word, value) pairs

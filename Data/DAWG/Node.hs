@@ -12,9 +12,7 @@ module Data.DAWG.Node
 , onSym
 , trans
 , edges
--- , children
 , subst
--- , reIdent
 -- * Edge
 , Edge
 , to
@@ -101,21 +99,8 @@ edges :: Unbox b => Node a b -> [b]
 edges = map snd . trans
 {-# INLINE edges #-}
 
--- -- | List children identifiers.
--- children :: Unbox b => Node a b -> [ID]
--- children = map to . edges
--- {-# INLINE children #-}
-
 -- | Substitue edge determined by a given symbol.
 subst :: Unbox b => Sym -> b -> Node a b -> Node a b
 subst x e (Branch w es) = Branch w (M.insert x e es)
 subst _ _ l             = l
 {-# INLINE subst #-}
-
--- -- | Assign new identifiers.
--- reIdent :: Unbox b => (ID -> ID) -> Node a b -> Node a b
--- reIdent _ (Leaf x)      = Leaf x
--- reIdent f (Branch e es) =
---     let reEdges = M.fromList . map (second reEdge) . M.toList
---         reEdge (i, y) = (f i, y)
---     in  Branch (f e) (reEdges es)

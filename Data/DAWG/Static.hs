@@ -28,13 +28,13 @@ module Data.DAWG.Static
 , unHash
 -- * Construction
 , empty
--- , fromList
--- , fromListWith
--- , fromLang
--- , freeze
--- -- * Weight
--- , Weight
--- , weigh
+, fromList
+, fromListWith
+, fromLang
+, freeze
+-- * Weight
+, Weight
+, weigh
 -- * Conversion
 , assocs
 , keys
@@ -44,7 +44,7 @@ module Data.DAWG.Static
 
 import Prelude hiding (lookup)
 import Control.Applicative ((<$), (<$>), (<|>))
-import Control.Arrow (first)
+import Control.Arrow (first, second)
 import Data.Binary (Binary)
 import Data.Vector.Binary ()
 import Data.Vector.Unboxed (Unbox)
@@ -53,6 +53,7 @@ import qualified Data.Vector as V
 
 import Data.DAWG.Node hiding (Node)
 import qualified Data.DAWG.Node as N
+import qualified Data.DAWG.Node.Specialized as NS
 import qualified Data.DAWG.VMap as VM
 import qualified Data.DAWG.Internal as I
 import qualified Data.DAWG as D
@@ -120,72 +121,81 @@ keys = map fst . assocs
 elems :: Unbox c => DAWG a b c -> [b]
 elems = map snd . assocs'I 0
 
--- -- | Construct 'DAWG' from the list of (word, value) pairs.
--- -- First a 'D.DAWG' is created and then it is frozen using
--- -- the 'freeze' function.
--- fromList :: (Enum a, Ord b) => [([a], b)] -> DAWG a b ()
--- fromList = freeze . D.fromList
--- {-# SPECIALIZE fromList :: Ord b => [(String, b)] -> DAWG Char b () #-}
--- 
--- -- | Construct DAWG from the list of (word, value) pairs
--- -- with a combining function.  The combining function is
--- -- applied strictly. First a 'D.DAWG' is created and then
--- -- it is frozen using the 'freeze' function.
--- fromListWith :: (Enum a, Ord b) => (b -> b -> b) -> [([a], b)] -> DAWG a b ()
--- fromListWith f = freeze . D.fromListWith f
--- {-# SPECIALIZE fromListWith :: Ord b => (b -> b -> b)
---         -> [(String, b)] -> DAWG Char b () #-}
--- 
--- -- | Make DAWG from the list of words.  Annotate each word with
--- -- the @()@ value.  First a 'D.DAWG' is created and then it is frozen
--- -- using the 'freeze' function.
--- fromLang :: Enum a => [[a]] -> DAWG a () ()
--- fromLang = freeze . D.fromLang
--- {-# SPECIALIZE fromLang :: [String] -> DAWG Char () () #-}
+-- | Construct 'DAWG' from the list of (word, value) pairs.
+-- First a 'D.DAWG' is created and then it is frozen using
+-- the 'freeze' function.
+fromList :: (Enum a, Ord b) => [([a], b)] -> DAWG a b ()
+fromList = freeze . D.fromList
+{-# SPECIALIZE fromList :: Ord b => [(String, b)] -> DAWG Char b () #-}
+
+-- | Construct DAWG from the list of (word, value) pairs
+-- with a combining function.  The combining function is
+-- applied strictly. First a 'D.DAWG' is created and then
+-- it is frozen using the 'freeze' function.
+fromListWith :: (Enum a, Ord b) => (b -> b -> b) -> [([a], b)] -> DAWG a b ()
+fromListWith f = freeze . D.fromListWith f
+{-# SPECIALIZE fromListWith :: Ord b => (b -> b -> b)
+        -> [(String, b)] -> DAWG Char b () #-}
+
+-- | Make DAWG from the list of words.  Annotate each word with
+-- the @()@ value.  First a 'D.DAWG' is created and then it is frozen
+-- using the 'freeze' function.
+fromLang :: Enum a => [[a]] -> DAWG a () ()
+fromLang = freeze . D.fromLang
+{-# SPECIALIZE fromLang :: [String] -> DAWG Char () () #-}
 
 -- | Weight of a node corresponds to the number of final states
 -- reachable from the node.  Weight of an edge is a sum of weights
 -- of preceding nodes outgoing from the same parent node.
 type Weight = Int
 
--- -- | Compute node weights and store corresponding values in transition labels.
--- weigh :: Unbox c => DAWG a b c -> DAWG a b Weight
--- weigh d = (DAWG . V.fromList)
---     [ branch n (apply ws (trans n))
---     | i <- [0 .. numStates d - 1]
---     , let n  = nodeBy i d
---     , let ws = accum (children n) ]
---   where
---     -- Branch with new edges.
---     branch Branch{..} es    = Branch eps es
---     branch Leaf{..}   _     = Leaf value
---     -- In nodeWeight node weights are memoized.
---     nodeWeight = ((V.!) . V.fromList) (map detWeight [0 .. numStates d - 1])
---     -- Determine weight of the node.
---     detWeight i = case nodeBy i d of
---         Leaf w  -> maybe 0 (const 1) w
---         n       -> sum . map nodeWeight $ allChildren n
---     -- Weight for subsequent edges.
---     accum = init . scanl (+) 0 . map nodeWeight
---     -- Apply weight to edges. 
---     apply ws ts = VM.fromList
---         [ (x, annotate w e)
---         | (w, (x, e)) <- zip ws ts ]
---     -- Plain children and epsilon child. 
---     allChildren n = eps n : children n
--- 
--- -- | Construct immutable version of the automaton.
--- freeze :: D.DAWG a b -> DAWG a b ()
--- freeze d = DAWG . V.fromList $
---     map (reIdent newID . oldBy) (M.elems (inverse old2new))
---   where
---     -- Map from old to new identifiers.
---     old2new = M.fromList $ (D.root d, 0) : zip (nodeIDs d) [1..]
---     newID   = (M.!) old2new
---     -- List of node IDs without the root ID.
---     nodeIDs = filter (/= D.root d) . map fst . M.assocs . I.nodeMap . D.graph
---     -- Non-frozen node by given identifier.
---     oldBy i = I.nodeBy i (D.graph d)
+-- | Compute node weights and store corresponding values in transition labels.
+weigh :: Unbox c => DAWG a b c -> DAWG a b Weight
+weigh d = (DAWG . V.fromList)
+    [ branch n (apply ws (trans n))
+    | i <- [0 .. numStates d - 1]
+    , let n  = nodeBy i d
+    , let ws = accum (children n) ]
+  where
+    -- Branch with new edges.
+    branch Branch{..} es    = Branch eps es
+    branch Leaf{..}   _     = Leaf value
+    -- In nodeWeight node weights are memoized.
+    nodeWeight = ((V.!) . V.fromList) (map detWeight [0 .. numStates d - 1])
+    -- Determine weight of the node.
+    detWeight i = case nodeBy i d of
+        Leaf w  -> maybe 0 (const 1) w
+        n       -> sum . map nodeWeight $ allChildren n
+    -- Weight for subsequent edges.
+    accum = init . scanl (+) 0 . map nodeWeight
+    -- Apply weight to edges. 
+    apply ws ts = VM.fromList
+        [ (x, annotate w e)
+        | (w, (x, e)) <- zip ws ts ]
+    -- Plain children and epsilon child. 
+    allChildren n = eps n : children n
+    -- IDs of plain children.
+    children = map to . edges
+
+-- | Construct immutable version of the automaton.
+freeze :: D.DAWG a b -> DAWG a b ()
+freeze d = DAWG . V.fromList $
+    map (nodeGeneric . NS.reIdent newID . oldBy)
+        (M.elems (inverse old2new))
+  where
+    -- Map from old to new identifiers.
+    old2new = M.fromList $ (D.root d, 0) : zip (nodeIDs d) [1..]
+    newID   = (M.!) old2new
+    -- List of node IDs without the root ID.
+    nodeIDs = filter (/= D.root d) . map fst . M.assocs . I.nodeMap . D.graph
+    -- Non-frozen node by given identifier.
+    oldBy i = I.nodeBy i (D.graph d)
+    -- Yield generic version of a specialized node.
+    nodeGeneric NS.Leaf{..}     = N.Leaf value
+    nodeGeneric NS.Branch{..}   = N.Branch eps (annEdges edgeMap)
+    -- Add () annotations on edges.
+    annEdges = VM.fromList . map annEdge . VM.toList
+    annEdge = second (labeled ())
         
 -- | Inverse of the map.
 inverse :: M.IntMap Int -> M.IntMap Int

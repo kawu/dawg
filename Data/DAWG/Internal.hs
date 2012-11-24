@@ -25,8 +25,8 @@ import qualified Data.IntSet as IS
 import qualified Data.IntMap as IM
 import qualified Control.Monad.State.Strict as S
 
-import Data.DAWG.Node2 hiding (Node)
-import qualified Data.DAWG.Node2 as N
+import Data.DAWG.Node.Specialized hiding (Node)
+import qualified Data.DAWG.Node.Specialized as N
 
 type Node a = N.Node a
 
@@ -179,7 +179,7 @@ generate g i = T.Node i
     ( T.Node (eps n) []
     : map (generate g) (edges n) )
   where
-    n           = nodeBy i g
+    n = nodeBy i g
 
 type SetM a = S.State IS.IntSet a
 

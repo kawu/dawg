@@ -1,8 +1,9 @@
 {-# LANGUAGE RecordWildCards #-}
 
--- | Internal representation of automata nodes.
+-- | Internal representation of automata nodes specialized to
+-- a version with unlabeled edges.
 
-module Data.DAWG.Node2
+module Data.DAWG.Node.Specialized
 (
 -- * Basic types
   ID
@@ -12,14 +13,13 @@ module Data.DAWG.Node2
 , onSym
 , trans
 , edges
--- , children
 , subst
--- , reIdent
+, reIdent
 ) where
 
 import Control.Applicative ((<$>), (<*>))
+import Control.Arrow (second)
 import Data.Binary (Binary, Get, put, get)
-import Data.Vector.Unboxed (Unbox)
 
 import qualified Data.DAWG.VMap as M
 
@@ -76,21 +76,15 @@ edges :: Node a -> [ID]
 edges = map snd . trans
 {-# INLINE edges #-}
 
--- -- | List children identifiers.
--- children :: Unbox b => Node a b -> [ID]
--- children = map to . edges
--- {-# INLINE children #-}
-
 -- | Substitue edge determined by a given symbol.
 subst :: Sym -> ID -> Node a -> Node a
 subst x e (Branch w es) = Branch w (M.insert x e es)
 subst _ _ l             = l
 {-# INLINE subst #-}
 
--- -- | Assign new identifiers.
--- reIdent :: Unbox b => (ID -> ID) -> Node a b -> Node a b
--- reIdent _ (Leaf x)      = Leaf x
--- reIdent f (Branch e es) =
---     let reEdges = M.fromList . map (second reEdge) . M.toList
---         reEdge (i, y) = (f i, y)
---     in  Branch (f e) (reEdges es)
+-- | Assign new identifiers.
+reIdent :: (ID -> ID) -> Node a -> Node a
+reIdent _ (Leaf x)      = Leaf x
+reIdent f (Branch e es) =
+    let reEdges = M.fromList . map (second f) . M.toList
+    in  Branch (f e) (reEdges es)
