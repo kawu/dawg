@@ -1,4 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE DoAndIfThenElse #-}
 
 -- | Internal representation of the "Data.DAWG" automaton.  Names in this
 -- module correspond to a graphical representation of automaton: nodes refer
@@ -8,8 +9,9 @@ module Data.DAWG.Internal
 ( 
 -- * Node
   Node (..)
-, Id
+, ID
 , edges
+, children
 , onSym
 , subst
 -- * Graph
@@ -20,68 +22,69 @@ module Data.DAWG.Internal
 , nodeID
 , insert
 , delete
+, fromNodes
 ) where
 
 import Control.Applicative ((<$>), (<*>))
+import Data.List (foldl')
 import Data.Binary (Binary, Get, put, get)
 import qualified Data.Map as M
+import qualified Data.Tree as T
 import qualified Data.IntSet as IS
 import qualified Data.IntMap as IM
+import qualified Control.Monad.State.Strict as S
 
 import qualified Data.DAWG.VMap as V
 
 -- | Node identifier.
-type Id = Int
+type ID = Int
 
 -- | Two nodes (states) belong to the same equivalence class (and,
 -- consequently, they must be represented as one node in the graph)
 -- iff they are equal with respect to their values and outgoing
 -- edges.
 --
--- Since 'Value' nodes are distinguished from 'Branch' nodes, two values
--- equal with respect to '==' function are always kept in one 'Value'
+-- Since 'Leaf' nodes are distinguished from 'Branch' nodes, two values
+-- equal with respect to '==' function are always kept in one 'Leaf'
 -- node in the graph.  It doesn't change the fact that to all 'Branch'
 -- nodes one value is assigned through the epsilon transition.
 --
--- Invariant: the 'value' identifier always points to the 'Value' node.
+-- Invariant: the 'eps' identifier always points to the 'Leaf' node.
 -- Edges in the 'edgeMap', on the other hand, point to 'Branch' nodes.
 data Node a
     = Branch {
         -- | Epsilon transition.
-          eps       :: {-# UNPACK #-} !Id
+          eps       :: {-# UNPACK #-} !ID
         -- | Map from alphabet symbols to 'Branch' node identifiers.
-        , edgeMap   :: !(V.VMap Id) }
-    | Value
-        { unValue :: !a }
+        , edgeMap   :: !(V.VMap ID) }
+    | Leaf { value  :: !a }
     deriving (Show, Eq, Ord)
-
-instance Functor Node where
-    fmap f (Value x) = Value (f x)
-    fmap _ (Branch x y) = Branch x y
 
 instance Binary a => Binary (Node a) where
     put Branch{..} = put (1 :: Int) >> put eps >> put edgeMap
-    put Value{..}  = put (2 :: Int) >> put unValue
+    put Leaf{..}   = put (2 :: Int) >> put value
     get = do
         x <- get :: Get Int
         case x of
             1 -> Branch <$> get <*> get
-            _ -> Value <$> get
+            _ -> Leaf <$> get
 
 -- | List of non-epsilon edges outgoing from the 'Branch' node.
-edges :: Node a -> [(Int, Id)]
-edges (Branch _ es)     = V.toList es
-edges (Value _)         = error "edges: value node"
+edges :: Node a -> [(Int, ID)]
+edges = V.toList . edgeMap
+
+-- | List of 'Branch' children IDs.
+children :: Node a -> [ID]
+children = map snd . edges
 
 -- | Identifier of the child determined by the given symbol.
-onSym :: Int -> Node a -> Maybe Id
-onSym x (Branch _ es) = V.lookup x es
-onSym _ (Value _)     = error "onSym: value node"
+onSym :: Int -> Node a -> Maybe ID
+onSym x = V.lookup x . edgeMap
 
 -- | Substitue the identifier of the child determined by the given symbol.
-subst :: Int -> Id -> Node a -> Node a
+subst :: Int -> ID -> Node a -> Node a
 subst x i (Branch w es) = Branch w (V.insert x i es)
-subst _ _ (Value _)     = error "subst: value node"
+subst _ _ (Leaf _)      = error "subst: leaf node"
 
 -- | A set of nodes.  To every node a unique identifier is assigned.
 -- Invariants: 
@@ -97,7 +100,7 @@ subst _ _ (Value _)     = error "subst: value node"
 -- the memory footprint?
 data Graph a = Graph {
     -- | Map from nodes to IDs.
-      idMap     :: !(M.Map (Node a) Id)
+      idMap     :: !(M.Map (Node a) ID)
     -- | Set of free IDs.
     , freeIDs   :: !IS.IntSet
     -- | Map from IDs to nodes. 
@@ -127,15 +130,15 @@ size :: Graph a -> Int
 size = M.size . idMap
 
 -- | Node with the given identifier.
-nodeBy :: Id -> Graph a -> Node a
+nodeBy :: ID -> Graph a -> Node a
 nodeBy i g = nodeMap g IM.! i
 
 -- | Retrieve the node identifier.
-nodeID :: Ord a => Node a -> Graph a -> Id
+nodeID :: Ord a => Node a -> Graph a -> ID
 nodeID n g = idMap g M.! n
 
 -- | Add new graph node.
-newNode :: Ord a => Node a -> Graph a -> (Id, Graph a)
+newNode :: Ord a => Node a -> Graph a -> (ID, Graph a)
 newNode n Graph{..} =
     (i, Graph idMap' freeIDs' nodeMap' ingoMap')
   where
@@ -147,7 +150,7 @@ newNode n Graph{..} =
         else IS.deleteFindMin freeIDs
 
 -- | Remove node from the graph.
-remNode :: Ord a => Id -> Graph a -> Graph a
+remNode :: Ord a => ID -> Graph a -> Graph a
 remNode i Graph{..} =
     Graph idMap' freeIDs' nodeMap' ingoMap'
   where
@@ -158,12 +161,12 @@ remNode i Graph{..} =
     n           = nodeMap IM.! i
 
 -- | Increment the number of ingoing paths.
-incIngo :: Id -> Graph a -> Graph a
+incIngo :: ID -> Graph a -> Graph a
 incIngo i g = g { ingoMap = IM.insertWith' (+) i 1 (ingoMap g) }
 
 -- | Decrement the number of ingoing paths and return
 -- the resulting number.
-decIngo :: Id -> Graph a -> (Int, Graph a)
+decIngo :: ID -> Graph a -> (Int, Graph a)
 decIngo i g =
     let k = (ingoMap g IM.! i) - 1
     in  (k, g { ingoMap = IM.insert i k (ingoMap g) })
@@ -173,7 +176,7 @@ decIngo i g =
 -- NOTE: Number of ingoing paths will not be changed for any descendants
 -- of the node, so the operation alone will not ensure that properties
 -- of the graph are preserved.
-insert :: Ord a => Node a -> Graph a -> (Id, Graph a)
+insert :: Ord a => Node a -> Graph a -> (ID, Graph a)
 insert n g = case M.lookup n (idMap g) of
     Just i  -> (i, incIngo i g)
     Nothing -> newNode n g
@@ -190,3 +193,72 @@ delete n g = if num == 0
   where
     i = nodeID n g
     (num, g') = decIngo i g
+
+-- | Construct a graph from a list of node/ID pairs and a root ID.
+-- Identifiers must be consistent with edges outgoing from
+-- individual nodes.
+fromNodes :: Ord a => [(Node a, ID)] -> ID -> Graph a
+fromNodes xs rootID = graph
+  where
+    graph = Graph
+        (M.fromList xs)
+        IS.empty
+        (IM.fromList $ map swap xs)
+        ( foldl' updIngo (IM.singleton rootID 1)
+            $ topSort graph rootID )
+    swap (x, y) = (y, x)
+    updIngo m i =
+        let n = nodeBy i graph
+            ingo = m IM.! i
+        in  foldl' (push ingo) m (children n)
+    push x m j = IM.adjust (+x) j m
+
+postorder :: T.Tree a -> [a] -> [a]
+postorder (T.Node a ts) = postorderF ts . (a :)
+
+postorderF :: T.Forest a -> [a] -> [a]
+postorderF ts = foldr (.) id $ map postorder ts
+
+postOrd :: Graph a -> ID -> [ID]
+postOrd g i = postorder (dfs g i) []
+
+-- | Topological sort given a root ID.
+topSort :: Graph a -> ID -> [ID]
+topSort g = reverse . postOrd g
+
+-- | Depth first search starting with given ID.
+dfs :: Graph a -> ID -> T.Tree ID
+dfs g = prune . generate g
+
+generate :: Graph a -> ID -> T.Tree ID
+generate g i = T.Node i
+    ( T.Node (eps n) []
+    : map (generate g) (children n) )
+  where
+    n           = nodeBy i g
+
+type SetM a = S.State IS.IntSet a
+
+run :: SetM a -> a
+run act = S.evalState act IS.empty
+
+contains :: ID -> SetM Bool
+contains i = IS.member i <$> S.get
+
+include :: ID -> SetM ()
+include i = S.modify (IS.insert i)
+
+prune :: T.Tree ID -> T.Tree ID
+prune t = head $ run (chop [t])
+
+chop :: T.Forest ID -> SetM (T.Forest ID)
+chop [] = return []
+chop (T.Node v ts : us) = do
+    visited <- contains v
+    if visited then
+        chop us
+    else do
+        include v
+        as <- chop ts
+        bs <- chop us
+        return (T.Node v as : bs)

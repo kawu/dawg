@@ -33,7 +33,7 @@ import Data.List (foldl')
 import Data.Binary (Binary, put, get)
 import qualified Control.Monad.State.Strict as S
 
-import Data.DAWG.Internal (Id, Node, Graph)
+import Data.DAWG.Internal (ID, Node, Graph)
 import qualified Data.DAWG.Internal as I
 import qualified Data.DAWG.VMap as V
 
@@ -43,17 +43,17 @@ mkState :: (Graph a -> Graph a) -> Graph a -> ((), Graph a)
 mkState f g = ((), f g)
 
 -- | Leaf node with no children and 'Nothing' value.
-insertLeaf :: Ord a => GraphM a Id 
+insertLeaf :: Ord a => GraphM a ID 
 insertLeaf = do
-    i <- insertNode (I.Value Nothing)
+    i <- insertNode (I.Leaf Nothing)
     insertNode (I.Branch i V.empty)
 
 -- | Return node with the given identifier.
-nodeBy :: Id -> GraphM a (Node (Maybe a))
+nodeBy :: ID -> GraphM a (Node (Maybe a))
 nodeBy i = I.nodeBy i <$> S.get
 
 -- Evaluate the 'I.insert' function within the monad.
-insertNode :: Ord a => Node (Maybe a) -> GraphM a Id
+insertNode :: Ord a => Node (Maybe a) -> GraphM a ID
 insertNode = S.state . I.insert
 
 -- Evaluate the 'I.delete' function within the monad.
@@ -61,7 +61,7 @@ deleteNode :: Ord a => Node (Maybe a) -> GraphM a ()
 deleteNode = S.state . mkState . I.delete
 
 -- | Invariant: the identifier points to the 'Branch' node.
-insertM :: Ord a => [Int] -> a -> Id -> GraphM a Id
+insertM :: Ord a => [Int] -> a -> ID -> GraphM a ID
 insertM (x:xs) y i = do
     n <- nodeBy i
     j <- case I.onSym x n of
@@ -75,10 +75,10 @@ insertM [] y i = do
     w <- nodeBy (I.eps n)
     deleteNode w
     deleteNode n
-    j <- insertNode (I.Value $ Just y)
+    j <- insertNode (I.Leaf $ Just y)
     insertNode (n { I.eps = j })
 
-insertWithM :: Ord a => (a -> a -> a) -> [Int] -> a -> Id -> GraphM a Id
+insertWithM :: Ord a => (a -> a -> a) -> [Int] -> a -> ID -> GraphM a ID
 insertWithM f (x:xs) y i = do
     n <- nodeBy i
     j <- case I.onSym x n of
@@ -92,13 +92,13 @@ insertWithM f [] y i = do
     w <- nodeBy (I.eps n)
     deleteNode w
     deleteNode n
-    let y'new = case I.unValue w of
+    let y'new = case I.value w of
             Just y' -> f y y'
             Nothing -> y
-    j <- insertNode (I.Value $ Just y'new)
+    j <- insertNode (I.Leaf $ Just y'new)
     insertNode (n { I.eps = j })
 
-deleteM :: Ord a => [Int] -> Id -> GraphM a Id
+deleteM :: Ord a => [Int] -> ID -> GraphM a ID
 deleteM (x:xs) i = do
     n <- nodeBy i
     case I.onSym x n of
@@ -115,23 +115,23 @@ deleteM [] i = do
     j <- insertLeaf
     insertNode (n { I.eps = j })
     
-lookupM :: [Int] -> Id -> GraphM a (Maybe a)
+lookupM :: [Int] -> ID -> GraphM a (Maybe a)
 lookupM [] i = do
     j <- I.eps <$> nodeBy i
-    I.unValue <$> nodeBy j
+    I.value <$> nodeBy j
 lookupM (x:xs) i = do
     n <- nodeBy i
     case I.onSym x n of
         Just j  -> lookupM xs j
         Nothing -> return Nothing
 
-assocsAcc :: Graph (Maybe a) -> Id -> [([Int], a)]
+assocsAcc :: Graph (Maybe a) -> ID -> [([Int], a)]
 assocsAcc g i =
     here w ++ concatMap there (I.edges n)
   where
     n = I.nodeBy i g
     w = I.nodeBy (I.eps n) g
-    here v = case I.unValue v of
+    here v = case I.value v of
         Just x  -> [([], x)]
         Nothing -> []
     there (sym, j) = map (first (sym:)) (assocsAcc g j)
@@ -141,7 +141,7 @@ assocsAcc g i =
 -- symbol type.
 data DAWG a b = DAWG
     { graph :: !(Graph (Maybe b))
-    , root  :: !Id }
+    , root  :: !ID }
     deriving (Show, Eq, Ord)
 
 instance (Ord b, Binary b) => Binary (DAWG a b) where
