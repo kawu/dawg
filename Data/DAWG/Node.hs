@@ -19,13 +19,8 @@ import Control.Arrow (second)
 import Data.Binary (Binary, Get, put, get)
 import qualified Data.Vector.Unboxed as U
 
+import Data.DAWG.Types
 import qualified Data.DAWG.VMap as M
-
--- | Node identifier.
-type ID = Int
-
--- | Internal representation of the transition symbol.
-type Sym = Int
 
 -- | Two nodes (states) belong to the same equivalence class (and,
 -- consequently, they must be represented as one node in the graph)
