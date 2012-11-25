@@ -65,7 +65,7 @@ onSym x (Branch _ es)   = M.lookup x es
 onSym _ (Leaf _)        = Nothing
 {-# INLINE onSym #-}
 
--- List of symbol/edge pairs outgoing from the node.
+-- | List of symbol/edge pairs outgoing from the node.
 trans :: Node a -> [(Sym, ID)]
 trans (Branch _ es)     = M.toList es
 trans (Leaf _)          = []

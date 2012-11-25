@@ -39,18 +39,22 @@ type Sym = Int
 -- | Edge with label.
 type Edge a = (ID, a)
 
+-- | Destination ID.
 to :: Edge a -> ID
 to = fst
 {-# INLINE to #-}
 
+-- | Edge label.
 label :: Edge a -> a
 label = snd
 {-# INLINE label #-}
 
+-- | Annotate edge wit a new label.
 annotate :: a -> Edge b -> Edge a
 annotate x (i, _) = (i, x)
 {-# INLINE annotate #-}
 
+-- | Construct edge annotated with a given label.
 labeled :: a -> ID -> Edge a
 labeled x i = (i, x)
 {-# INLINE labeled #-}
@@ -91,7 +95,7 @@ onSym x (Branch _ es)   = M.lookup x es
 onSym _ (Leaf _)        = Nothing
 {-# INLINE onSym #-}
 
--- List of symbol/edge pairs outgoing from the node.
+-- | List of symbol/edge pairs outgoing from the node.
 trans :: Unbox b => Node a b -> [(Sym, b)]
 trans (Branch _ es)     = M.toList es
 trans (Leaf _)          = []
@@ -108,7 +112,7 @@ subst x e (Branch w es) = Branch w (M.insert x e es)
 subst _ _ l             = l
 {-# INLINE subst #-}
 
--- Yield generic version of a specialized node.
+-- | Yield generic version of a specialized node.
 toGeneric :: N.Node a -> Node a (Edge ())
 toGeneric N.Leaf{..}    = Leaf value
 toGeneric N.Branch{..}  = Branch eps (annEdges edgeMap) where
