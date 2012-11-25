@@ -50,15 +50,15 @@ import Data.Vector.Binary ()
 import Data.Vector.Unboxed (Unbox)
 import qualified Data.IntMap as M
 import qualified Data.Vector as V
+import qualified Data.Vector.Unboxed as U
 
 import Data.DAWG.Node hiding (Node)
 import qualified Data.DAWG.Node as N
-import qualified Data.DAWG.Node.Specialized as NS
 import qualified Data.DAWG.VMap as VM
 import qualified Data.DAWG.Internal as I
 import qualified Data.DAWG as D
 
-type Node a b = N.Node (Maybe a) (Edge b)
+type Node a b = N.Node (Maybe a) b
 
 -- | @DAWG a b c@ constitutes an automaton with alphabet symbols of type /a/,
 -- node values of type /Maybe b/ and additional transition labels of type /c/.
@@ -69,7 +69,7 @@ newtype DAWG a b c = DAWG { unDAWG :: V.Vector (Node b c) }
 -- | Empty DAWG.
 empty :: Unbox c => DAWG a b c
 empty = DAWG $ V.fromList
-    [ Branch 1 VM.empty
+    [ Branch 1 VM.empty U.empty
     , Leaf Nothing ]
 
 -- | Number of states in the automaton.
@@ -94,7 +94,7 @@ lookup xs' =
 lookup'I :: Unbox c => [Sym] -> ID -> DAWG a b c -> Maybe b
 lookup'I []     i d = leafValue (nodeBy i d) d
 lookup'I (x:xs) i d = case onSym x (nodeBy i d) of
-    Just e  -> lookup'I xs (to e) d
+    Just j  -> lookup'I xs j d
     Nothing -> Nothing
 
 -- | Return all key/value pairs in the DAWG in ascending key order.
@@ -110,7 +110,7 @@ assocs'I i d =
     here = case leafValue n d of
         Just x  -> [([], x)]
         Nothing -> []
-    there (x, e) = map (first (x:)) (assocs'I (to e) d)
+    there (x, j) = map (first (x:)) (assocs'I j d)
 
 -- | Return all keys of the DAWG in ascending order.
 keys :: (Unbox c, Enum a) => DAWG a b c -> [[a]]
@@ -152,35 +152,29 @@ type Weight = Int
 -- | Compute node weights and store corresponding values in transition labels.
 weigh :: Unbox c => DAWG a b c -> DAWG a b Weight
 weigh d = (DAWG . V.fromList)
-    [ branch n (apply ws (trans n))
+    [ branch n ws
     | i <- [0 .. numStates d - 1]
     , let n  = nodeBy i d
-    , let ws = accum (children n) ]
+    , let ws = accum (edges n) ]
   where
     -- Branch with new edges.
-    branch Branch{..} es    = Branch eps es
+    branch Branch{..} ws    = Branch eps edgeMap ws
     branch Leaf{..}   _     = Leaf value
     -- In nodeWeight node weights are memoized.
     nodeWeight = ((V.!) . V.fromList) (map detWeight [0 .. numStates d - 1])
     -- Determine weight of the node.
     detWeight i = case nodeBy i d of
         Leaf w  -> maybe 0 (const 1) w
-        n       -> sum . map nodeWeight $ allChildren n
-    -- Weight for subsequent edges.
-    accum = init . scanl (+) 0 . map nodeWeight
-    -- Apply weight to edges. 
-    apply ws ts = VM.fromList
-        [ (x, annotate w e)
-        | (w, (x, e)) <- zip ws ts ]
+        n       -> sum . map nodeWeight $ children n
+    -- Weights for subsequent edges.
+    accum = U.fromList . init . scanl (+) 0 . map nodeWeight
     -- Plain children and epsilon child. 
-    allChildren n = eps n : children n
-    -- IDs of plain children.
-    children = map to . edges
+    children n = eps n : edges n
 
 -- | Construct immutable version of the automaton.
 freeze :: D.DAWG a b -> DAWG a b ()
 freeze d = DAWG . V.fromList $
-    map (N.toGeneric . NS.reIdent newID . oldBy)
+    map (N.reIdent newID . oldBy)
         (M.elems (inverse old2new))
   where
     -- Map from old to new identifiers.
@@ -230,10 +224,10 @@ index'I :: [Sym] -> ID -> DAWG a b Weight -> Maybe Int
 index'I []     i d = 0 <$ leafValue (nodeBy i d) d
 index'I (x:xs) i d = do
     let n = nodeBy i d
-        v = maybe 0 (const 1) (leafValue n d)
-    e <- onSym x n
-    w <- index'I xs (to e) d
-    return (v + w + label e)
+        u = maybe 0 (const 1) (leafValue n d)
+    (j, v) <- onSym' x n
+    w <- index'I xs j d
+    return (u + v + w)
 
 -- | Perfect hashing function for dictionary entries.
 -- A synonym for the 'index' function.
@@ -253,15 +247,17 @@ byIndex'I ix i d
     | otherwise = here <|> there
   where
     n = nodeBy i d
-    v = maybe 0 (const 1) (leafValue n d)
+    u = maybe 0 (const 1) (leafValue n d)
     here
         | ix == 0   = [] <$ leafValue (nodeBy i d) d
         | otherwise = Nothing
     there = do
-        (x, e) <- VM.findLastLE cmp (edgeMap n)
-        xs <- byIndex'I (ix - v - label e) (to e) d
+        -- (x, e) <- VM.findLastLE cmp (edgeMap n)
+        (k, w) <- VM.findLastLE cmp (labelVect n)
+        (x, j) <- VM.byIndex k (edgeMap n)
+        xs <- byIndex'I (ix - u - w) j d
         return (x:xs)
-    cmp e = compare (label e) (ix - v)
+    cmp w = compare w (ix - u)
 
 -- | Inverse of the 'hash' function and a synonym for the 'byIndex' function.
 unHash :: Enum a => Int -> DAWG a b Weight -> Maybe [a]

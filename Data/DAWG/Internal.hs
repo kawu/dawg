@@ -24,10 +24,10 @@ import qualified Data.IntSet as IS
 import qualified Data.IntMap as IM
 -- import qualified Control.Monad.State.Strict as S
 
-import Data.DAWG.Node.Specialized hiding (Node)
-import qualified Data.DAWG.Node.Specialized as N
+import Data.DAWG.Node hiding (Node)
+import qualified Data.DAWG.Node as N
 
-type Node a = N.Node a
+type Node a = N.Node a ()
 
 -- | A set of nodes.  To every node a unique identifier is assigned.
 -- Invariants: 

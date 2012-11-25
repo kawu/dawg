@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE TupleSections #-}
 
 -- | A vector representation of 'M.Map'.
 
@@ -6,6 +7,8 @@ module Data.DAWG.VMap
 ( VMap (unVMap)
 , empty
 , lookup
+, index
+, byIndex
 , insert
 , findLastLE
 , fromList
@@ -39,11 +42,21 @@ empty = VMap U.empty
 
 -- | Lookup the symbol in the map.
 lookup :: Unbox a => Int -> VMap a -> Maybe a
-lookup x (VMap v) =
-    case binarySearch (flip compare x . fst) v of
-        Left k  -> snd <$> v U.!? k
-        Right _ -> Nothing
+lookup x m = do
+    k <- index x m
+    snd <$> byIndex k m
 {-# INLINE lookup #-}
+
+-- | Lookup the symbol in the map.
+index :: Unbox a => Int -> VMap a -> Maybe Int
+index x (VMap v)
+    = either Just (const Nothing) $
+        binarySearch (flip compare x . fst) v
+{-# INLINE index #-}
+
+byIndex :: Unbox a => Int -> VMap a -> Maybe (Int, a)
+byIndex k (VMap v) = v U.!? k
+{-# INLINE byIndex #-}
 
 -- | Insert the symbol/value pair into the map.
 insert :: Unbox a => Int -> a -> VMap a -> VMap a
@@ -58,10 +71,15 @@ insert x y (VMap v) = VMap $
 -- | Given a vector sorted with respect to some underlying comparison
 -- function, find last element which is not 'GT' with respect to the
 -- comparison function.
-findLastLE :: Unbox a => (a -> Ordering) -> VMap a -> Maybe (Int, a)
-findLastLE cmp (VMap v) =
-    let k = binarySearch (cmp . snd) v
-    in  v U.!? either id (\x -> x-1) k
+findLastLE :: Unbox a => (a -> Ordering) -> U.Vector a -> Maybe (Int, a)
+findLastLE cmp v =
+    let k' = binarySearch cmp v
+    	k  = either id (\x -> x-1) k'
+    in  (k,) <$> v U.!? k
+-- findLastLE :: Unbox a => (a -> Ordering) -> VMap a -> Maybe (Int, a)
+-- findLastLE cmp (VMap v) =
+--     let k = binarySearch (cmp . snd) v
+--     in  v U.!? either id (\x -> x-1) k
 {-# INLINE findLastLE #-}
 
 -- | Given a vector of length @n@ strictly ascending with respect to a given

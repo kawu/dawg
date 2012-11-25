@@ -14,7 +14,6 @@ module Data.DAWG.Node.Specialized
 , trans
 , edges
 , subst
-, reIdent
 ) where
 
 import Control.Applicative ((<$>), (<*>))
@@ -81,10 +80,3 @@ subst :: Sym -> ID -> Node a -> Node a
 subst x e (Branch w es) = Branch w (M.insert x e es)
 subst _ _ l             = l
 {-# INLINE subst #-}
-
--- | Assign new identifiers.
-reIdent :: (ID -> ID) -> Node a -> Node a
-reIdent _ (Leaf x)      = Leaf x
-reIdent f (Branch e es) =
-    let reEdges = M.fromList . map (second f) . M.toList
-    in  Branch (f e) (reEdges es)

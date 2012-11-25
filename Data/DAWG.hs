@@ -31,16 +31,17 @@ import Control.Applicative ((<$>), (<*>))
 import Control.Arrow (first)
 import Data.List (foldl')
 import Data.Binary (Binary, put, get)
+import qualified Data.Vector.Unboxed as U
 import qualified Control.Monad.State.Strict as S
 
 import Data.DAWG.Internal (Graph)
 import qualified Data.DAWG.Internal as I
 import qualified Data.DAWG.VMap as V
 
-import Data.DAWG.Node.Specialized hiding (Node)
-import qualified Data.DAWG.Node.Specialized as N
+import Data.DAWG.Node hiding (Node)
+import qualified Data.DAWG.Node as N
 
-type Node a = N.Node (Maybe a)
+type Node a = N.Node (Maybe a) ()
 
 type GraphM a b = S.State (Graph (Maybe a)) b
 
@@ -51,7 +52,7 @@ mkState f g = ((), f g)
 insertLeaf :: Ord a => GraphM a ID 
 insertLeaf = do
     i <- insertNode (N.Leaf Nothing)
-    insertNode (N.Branch i V.empty)
+    insertNode (N.Branch i V.empty U.empty)
 
 -- | Return node with the given identifier.
 nodeBy :: ID -> GraphM a (Node a)
