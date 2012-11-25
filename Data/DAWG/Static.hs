@@ -16,7 +16,7 @@
 module Data.DAWG.Static
 (
 -- * DAWG type
-  DAWG (..)
+  DAWG
 -- * Query
 , lookup
 , numStates
@@ -55,8 +55,8 @@ import qualified Data.Vector.Unboxed as U
 import Data.DAWG.Node hiding (Node)
 import qualified Data.DAWG.Node as N
 import qualified Data.DAWG.VMap as VM
-import qualified Data.DAWG.Internal as I
-import qualified Data.DAWG as D
+import qualified Data.DAWG.Graph as G
+import qualified Data.DAWG.Internal as D
 
 type Node a b = N.Node (Maybe a) b
 
@@ -181,9 +181,9 @@ freeze d = DAWG . V.fromList $
     old2new = M.fromList $ (D.root d, 0) : zip (nodeIDs d) [1..]
     newID   = (M.!) old2new
     -- List of node IDs without the root ID.
-    nodeIDs = filter (/= D.root d) . map fst . M.assocs . I.nodeMap . D.graph
+    nodeIDs = filter (/= D.root d) . map fst . M.assocs . G.nodeMap . D.graph
     -- Non-frozen node by given identifier.
-    oldBy i = I.nodeBy i (D.graph d)
+    oldBy i = G.nodeBy i (D.graph d)
         
 -- | Inverse of the map.
 inverse :: M.IntMap Int -> M.IntMap Int

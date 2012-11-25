@@ -54,6 +54,7 @@ index x (VMap v)
         binarySearch (flip compare x . fst) v
 {-# INLINE index #-}
 
+-- | Lookup key/value pair by vector index.
 byIndex :: Unbox a => Int -> VMap a -> Maybe (Int, a)
 byIndex k (VMap v) = v U.!? k
 {-# INLINE byIndex #-}

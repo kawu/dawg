@@ -31,11 +31,13 @@ library
 
     exposed-modules:
         Data.DAWG
-      , Data.DAWG.Node
-      -- , Data.DAWG.Node.Specialized
       , Data.DAWG.Static
+
+    other-modules:
+        Data.DAWG.VMap
+      , Data.DAWG.Node
+      , Data.DAWG.Graph
       , Data.DAWG.Internal
-      , Data.DAWG.VMap
 
     ghc-options: -Wall -O2
 

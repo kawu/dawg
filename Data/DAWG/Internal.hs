@@ -1,207 +1,245 @@
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE DoAndIfThenElse #-}
-
--- | Internal representation of the "Data.DAWG" automaton.  Names in this
--- module correspond to a graphical representation of automaton: nodes refer
--- to states and edges refer to transitions.
+-- | The module implements /directed acyclic word graphs/ (DAWGs) internaly
+-- represented as /minimal acyclic deterministic finite-state automata/.
+-- The implementation provides fast insert and delete operations
+-- which can be used to build the DAWG structure incrementaly.
 
 module Data.DAWG.Internal
-( Graph (..)
+(
+-- * DAWG type
+  DAWG (..)
+-- * Query
+, numStates
+, lookup
+-- * Construction
 , empty
-, size
-, nodeBy
-, nodeID
+, fromList
+, fromListWith
+, fromLang
+-- ** Insertion
 , insert
+, insertWith
+-- ** Deletion
 , delete
+-- * Conversion
+, assocs
+, keys
+, elems
 ) where
 
+import Prelude hiding (lookup)
 import Control.Applicative ((<$>), (<*>))
--- import Data.List (foldl')
+import Control.Arrow (first)
+import Data.List (foldl')
 import Data.Binary (Binary, put, get)
-import qualified Data.Map as M
--- import qualified Data.Tree as T
-import qualified Data.IntSet as IS
-import qualified Data.IntMap as IM
--- import qualified Control.Monad.State.Strict as S
+import qualified Data.Vector.Unboxed as U
+import qualified Control.Monad.State.Strict as S
+
+import Data.DAWG.Graph (Graph)
+import qualified Data.DAWG.Graph as G
+import qualified Data.DAWG.VMap as V
 
 import Data.DAWG.Node hiding (Node)
 import qualified Data.DAWG.Node as N
 
-type Node a = N.Node a ()
+type Node a = N.Node (Maybe a) ()
 
--- | A set of nodes.  To every node a unique identifier is assigned.
--- Invariants: 
---
---   * freeIDs \\intersection occupiedIDs = \\emptySet,
---
---   * freeIDs \\sum occupiedIDs =
---     {0, 1, ..., |freeIDs \\sum occupiedIDs| - 1},
---
--- where occupiedIDs = elemSet idMap.
---
--- TODO: Is it possible to merge 'freeIDs' with 'ingoMap' to reduce
--- the memory footprint?
-data Graph a = Graph {
-    -- | Map from nodes to IDs.
-      idMap     :: !(M.Map (Node a) ID)
-    -- | Set of free IDs.
-    , freeIDs   :: !IS.IntSet
-    -- | Map from IDs to nodes. 
-    , nodeMap   :: !(IM.IntMap (Node a))
-    -- | Number of ingoing paths (different paths from the root
-    -- to the given node) for each node ID in the graph.
-    -- The number of ingoing paths can be also interpreted as
-    -- a number of occurences of the node in a tree representation
-    -- of the graph.
-    , ingoMap   :: !(IM.IntMap Int) }
+type GraphM a b = S.State (Graph (Maybe a)) b
+
+mkState :: (Graph a -> Graph a) -> Graph a -> ((), Graph a)
+mkState f g = ((), f g)
+
+-- | Leaf node with no children and 'Nothing' value.
+insertLeaf :: Ord a => GraphM a ID 
+insertLeaf = do
+    i <- insertNode (N.Leaf Nothing)
+    insertNode (N.Branch i V.empty U.empty)
+
+-- | Return node with the given identifier.
+nodeBy :: ID -> GraphM a (Node a)
+nodeBy i = G.nodeBy i <$> S.get
+
+-- Evaluate the 'G.insert' function within the monad.
+insertNode :: Ord a => Node a -> GraphM a ID
+insertNode = S.state . G.insert
+
+-- Evaluate the 'G.delete' function within the monad.
+deleteNode :: Ord a => Node a -> GraphM a ()
+deleteNode = S.state . mkState . G.delete
+
+-- | Invariant: the identifier points to the 'Branch' node.
+insertM :: Ord a => [Int] -> a -> ID -> GraphM a ID
+insertM (x:xs) y i = do
+    n <- nodeBy i
+    j <- case onSym x n of
+        Just j  -> return j
+        Nothing -> insertLeaf
+    k <- insertM xs y j
+    deleteNode n
+    insertNode (subst x k n)
+insertM [] y i = do
+    n <- nodeBy i
+    w <- nodeBy (N.eps n)
+    deleteNode w
+    deleteNode n
+    j <- insertNode (N.Leaf $ Just y)
+    insertNode (n { N.eps = j })
+
+insertWithM :: Ord a => (a -> a -> a) -> [Int] -> a -> ID -> GraphM a ID
+insertWithM f (x:xs) y i = do
+    n <- nodeBy i
+    j <- case onSym x n of
+        Just j  -> return j
+        Nothing -> insertLeaf
+    k <- insertWithM f xs y j
+    deleteNode n
+    insertNode (subst x k n)
+insertWithM f [] y i = do
+    n <- nodeBy i
+    w <- nodeBy (N.eps n)
+    deleteNode w
+    deleteNode n
+    let y'new = case N.value w of
+            Just y' -> f y y'
+            Nothing -> y
+    j <- insertNode (N.Leaf $ Just y'new)
+    insertNode (n { N.eps = j })
+
+deleteM :: Ord a => [Int] -> ID -> GraphM a ID
+deleteM (x:xs) i = do
+    n <- nodeBy i
+    case onSym x n of
+        Nothing -> return i
+        Just j  -> do
+            k <- deleteM xs j
+            deleteNode n
+            insertNode (subst x k n)
+deleteM [] i = do
+    n <- nodeBy i
+    w <- nodeBy (N.eps n)
+    deleteNode w
+    deleteNode n
+    j <- insertLeaf
+    insertNode (n { N.eps = j })
+    
+lookupM :: [Int] -> ID -> GraphM a (Maybe a)
+lookupM [] i = do
+    j <- N.eps <$> nodeBy i
+    N.value <$> nodeBy j
+lookupM (x:xs) i = do
+    n <- nodeBy i
+    case onSym x n of
+        Just j  -> lookupM xs j
+        Nothing -> return Nothing
+
+assocsAcc :: Graph (Maybe a) -> ID -> [([Int], a)]
+assocsAcc g i =
+    here w ++ concatMap there (trans n)
+  where
+    n = G.nodeBy i g
+    w = G.nodeBy (N.eps n) g
+    here v = case N.value v of
+        Just x  -> [([], x)]
+        Nothing -> []
+    there (sym, j) = map (first (sym:)) (assocsAcc g j)
+
+-- | A directed acyclic word graph with phantom type @a@ representing
+-- type of alphabet elements.
+data DAWG a b = DAWG
+    { graph :: !(Graph (Maybe b))
+    , root  :: !ID }
     deriving (Show, Eq, Ord)
 
-instance (Ord a, Binary a) => Binary (Graph a) where
-    put Graph{..} = do
-    	put idMap
-	put freeIDs
-	put nodeMap
-	put ingoMap
-    get = Graph <$> get <*> get <*> get <*> get
+instance (Ord b, Binary b) => Binary (DAWG a b) where
+    put d = do
+        put (graph d)
+        put (root d)
+    get = DAWG <$> get <*> get
 
--- | Empty graph.
-empty :: Graph a
-empty = Graph M.empty IS.empty IM.empty IM.empty
+-- | Empty DAWG.
+empty :: Ord b => DAWG a b
+empty = 
+    let (i, g) = S.runState insertLeaf G.empty
+    in  DAWG g i
 
--- | Size of the graph (number of nodes).
-size :: Graph a -> Int
-size = M.size . idMap
+-- | Number of states in the underlying graph.
+numStates :: DAWG a b -> Int
+numStates = G.size . graph
 
--- | Node with the given identifier.
-nodeBy :: ID -> Graph a -> Node a
-nodeBy i g = nodeMap g IM.! i
+-- | Insert the (key, value) pair into the DAWG.
+insert :: (Enum a, Ord b) => [a] -> b -> DAWG a b -> DAWG a b
+insert xs' y d =
+    let xs = map fromEnum xs'
+        (i, g) = S.runState (insertM xs y $ root d) (graph d)
+    in  DAWG g i
+{-# INLINE insert #-}
+{-# SPECIALIZE insert :: Ord b => String -> b -> DAWG Char b -> DAWG Char b #-}
 
--- | Retrieve the node identifier.
-nodeID :: Ord a => Node a -> Graph a -> ID
-nodeID n g = idMap g M.! n
+-- | Insert with a function, combining new value and old value.
+-- 'insertWith' f key value d will insert the pair (key, value) into d if
+-- key does not exist in the DAWG. If the key does exist, the function
+-- will insert the pair (key, f new_value old_value).
+insertWith
+    :: (Enum a, Ord b) => (b -> b -> b)
+    -> [a] -> b -> DAWG a b -> DAWG a b
+insertWith f xs' y d =
+    let xs = map fromEnum xs'
+        (i, g) = S.runState (insertWithM f xs y $ root d) (graph d)
+    in  DAWG g i
+{-# SPECIALIZE insertWith
+        :: Ord b => (b -> b -> b) -> String -> b
+        -> DAWG Char b -> DAWG Char b #-}
 
--- | Add new graph node.
-newNode :: Ord a => Node a -> Graph a -> (ID, Graph a)
-newNode n Graph{..} =
-    (i, Graph idMap' freeIDs' nodeMap' ingoMap')
-  where
-    idMap'      = M.insert  n i idMap
-    nodeMap'    = IM.insert i n nodeMap
-    ingoMap'    = IM.insert i 1 ingoMap
-    (i, freeIDs') = if IS.null freeIDs
-        then (M.size idMap, freeIDs)
-        else IS.deleteFindMin freeIDs
+-- | Delete the key from the DAWG.
+delete :: (Enum a, Ord b) => [a] -> DAWG a b -> DAWG a b
+delete xs' d =
+    let xs = map fromEnum xs'
+        (i, g) = S.runState (deleteM xs $ root d) (graph d)
+    in  DAWG g i
+{-# SPECIALIZE delete :: Ord b => String -> DAWG Char b -> DAWG Char b #-}
 
--- | Remove node from the graph.
-remNode :: Ord a => ID -> Graph a -> Graph a
-remNode i Graph{..} =
-    Graph idMap' freeIDs' nodeMap' ingoMap'
-  where
-    idMap'      = M.delete  n idMap
-    nodeMap'    = IM.delete i nodeMap
-    ingoMap'    = IM.delete i ingoMap
-    freeIDs'    = IS.insert i freeIDs
-    n           = nodeMap IM.! i
+-- | Find value associated with the key.
+lookup :: Enum a => [a] -> DAWG a b -> Maybe b
+lookup xs' d =
+    let xs = map fromEnum xs'
+    in  S.evalState (lookupM xs $ root d) (graph d)
+{-# SPECIALIZE lookup :: String -> DAWG Char b -> Maybe b #-}
 
--- | Increment the number of ingoing paths.
-incIngo :: ID -> Graph a -> Graph a
-incIngo i g = g { ingoMap = IM.insertWith' (+) i 1 (ingoMap g) }
+-- | Return all key/value pairs in the DAWG in ascending key order.
+assocs :: Enum a => DAWG a b -> [([a], b)]
+assocs
+    = map (first (map toEnum))
+    . (assocsAcc <$> graph <*> root)
+{-# SPECIALIZE assocs :: DAWG Char b -> [(String, b)] #-}
 
--- | Decrement the number of ingoing paths and return
--- the resulting number.
-decIngo :: ID -> Graph a -> (Int, Graph a)
-decIngo i g =
-    let k = (ingoMap g IM.! i) - 1
-    in  (k, g { ingoMap = IM.insert i k (ingoMap g) })
+-- | Return all keys of the DAWG in ascending order.
+keys :: Enum a => DAWG a b -> [[a]]
+keys = map fst . assocs
+{-# SPECIALIZE keys :: DAWG Char b -> [String] #-}
 
--- | Insert node into the graph.  If the node was already a member
--- of the graph, just increase the number of ingoing paths.
--- NOTE: Number of ingoing paths will not be changed for any descendants
--- of the node, so the operation alone will not ensure that properties
--- of the graph are preserved.
-insert :: Ord a => Node a -> Graph a -> (ID, Graph a)
-insert n g = case M.lookup n (idMap g) of
-    Just i  -> (i, incIngo i g)
-    Nothing -> newNode n g
+-- | Return all elements of the DAWG in the ascending order of their keys.
+elems :: DAWG a b -> [b]
+elems = map snd . (assocsAcc <$> graph <*> root)
 
--- | Delete node from the graph.  If the node was present in the graph
--- at multiple positions, just decrease the number of ingoing paths.
--- NOTE: The function does not delete descendant nodes which may become
--- inaccesible nor does it change the number of ingoing paths for any
--- descendant of the node.
-delete :: Ord a => Node a -> Graph a -> Graph a
-delete n g = if num == 0
-    then remNode i g'
-    else g'
-  where
-    i = nodeID n g
-    (num, g') = decIngo i g
+-- | Construct DAWG from the list of (word, value) pairs.
+fromList :: (Enum a, Ord b) => [([a], b)] -> DAWG a b
+fromList xs =
+    let update t (x, v) = insert x v t
+    in  foldl' update empty xs
+{-# INLINE fromList #-}
+{-# SPECIALIZE fromList :: Ord b => [(String, b)] -> DAWG Char b #-}
 
--- -- | Construct a graph from a list of node/ID pairs and a root ID.
--- -- Identifiers must be consistent with edges outgoing from
--- -- individual nodes.
--- fromNodes :: Ord a => [(Node a, ID)] -> ID -> Graph a
--- fromNodes xs rootID = graph
---   where
---     graph = Graph
---         (M.fromList xs)
---         IS.empty
---         (IM.fromList $ map swap xs)
---         ( foldl' updIngo (IM.singleton rootID 1)
---             $ topSort graph rootID )
---     swap (x, y) = (y, x)
---     updIngo m i =
---         let n = nodeBy i graph
---             ingo = m IM.! i
---         in  foldl' (push ingo) m (edges n)
---     push x m j = IM.adjust (+x) j m
--- 
--- postorder :: T.Tree a -> [a] -> [a]
--- postorder (T.Node a ts) = postorderF ts . (a :)
--- 
--- postorderF :: T.Forest a -> [a] -> [a]
--- postorderF ts = foldr (.) id $ map postorder ts
--- 
--- postOrd :: Graph a -> ID -> [ID]
--- postOrd g i = postorder (dfs g i) []
--- 
--- -- | Topological sort given a root ID.
--- topSort :: Graph a -> ID -> [ID]
--- topSort g = reverse . postOrd g
--- 
--- -- | Depth first search starting with given ID.
--- dfs :: Graph a -> ID -> T.Tree ID
--- dfs g = prune . generate g
--- 
--- generate :: Graph a -> ID -> T.Tree ID
--- generate g i = T.Node i
---     ( T.Node (eps n) []
---     : map (generate g) (edges n) )
---   where
---     n = nodeBy i g
--- 
--- type SetM a = S.State IS.IntSet a
--- 
--- run :: SetM a -> a
--- run act = S.evalState act IS.empty
--- 
--- contains :: ID -> SetM Bool
--- contains i = IS.member i <$> S.get
--- 
--- include :: ID -> SetM ()
--- include i = S.modify (IS.insert i)
--- 
--- prune :: T.Tree ID -> T.Tree ID
--- prune t = head $ run (chop [t])
--- 
--- chop :: T.Forest ID -> SetM (T.Forest ID)
--- chop [] = return []
--- chop (T.Node v ts : us) = do
---     visited <- contains v
---     if visited then
---         chop us
---     else do
---         include v
---         as <- chop ts
---         bs <- chop us
---         return (T.Node v as : bs)
+-- | Construct DAWG from the list of (word, value) pairs
+-- with a combining function.  The combining function is
+-- applied strictly.
+fromListWith :: (Enum a, Ord b) => (b -> b -> b) -> [([a], b)] -> DAWG a b
+fromListWith f xs =
+    let update t (x, v) = insertWith f x v t
+    in  foldl' update empty xs
+{-# SPECIALIZE fromListWith :: Ord b => (b -> b -> b)
+        -> [(String, b)] -> DAWG Char b #-}
+
+-- | Make DAWG from the list of words.  Annotate each word with
+-- the @()@ value.
+fromLang :: Enum a => [[a]] -> DAWG a ()
+fromLang xs = fromList [(x, ()) | x <- xs]
+{-# SPECIALIZE fromLang :: [String] -> DAWG Char () #-}
