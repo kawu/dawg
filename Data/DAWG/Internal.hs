@@ -13,17 +13,16 @@ module Data.DAWG.Internal
 , nodeID
 , insert
 , delete
-, fromNodes
 ) where
 
 import Control.Applicative ((<$>), (<*>))
-import Data.List (foldl')
+-- import Data.List (foldl')
 import Data.Binary (Binary, put, get)
 import qualified Data.Map as M
-import qualified Data.Tree as T
+-- import qualified Data.Tree as T
 import qualified Data.IntSet as IS
 import qualified Data.IntMap as IM
-import qualified Control.Monad.State.Strict as S
+-- import qualified Control.Monad.State.Strict as S
 
 import Data.DAWG.Node.Specialized hiding (Node)
 import qualified Data.DAWG.Node.Specialized as N
@@ -138,71 +137,71 @@ delete n g = if num == 0
     i = nodeID n g
     (num, g') = decIngo i g
 
--- | Construct a graph from a list of node/ID pairs and a root ID.
--- Identifiers must be consistent with edges outgoing from
--- individual nodes.
-fromNodes :: Ord a => [(Node a, ID)] -> ID -> Graph a
-fromNodes xs rootID = graph
-  where
-    graph = Graph
-        (M.fromList xs)
-        IS.empty
-        (IM.fromList $ map swap xs)
-        ( foldl' updIngo (IM.singleton rootID 1)
-            $ topSort graph rootID )
-    swap (x, y) = (y, x)
-    updIngo m i =
-        let n = nodeBy i graph
-            ingo = m IM.! i
-        in  foldl' (push ingo) m (edges n)
-    push x m j = IM.adjust (+x) j m
-
-postorder :: T.Tree a -> [a] -> [a]
-postorder (T.Node a ts) = postorderF ts . (a :)
-
-postorderF :: T.Forest a -> [a] -> [a]
-postorderF ts = foldr (.) id $ map postorder ts
-
-postOrd :: Graph a -> ID -> [ID]
-postOrd g i = postorder (dfs g i) []
-
--- | Topological sort given a root ID.
-topSort :: Graph a -> ID -> [ID]
-topSort g = reverse . postOrd g
-
--- | Depth first search starting with given ID.
-dfs :: Graph a -> ID -> T.Tree ID
-dfs g = prune . generate g
-
-generate :: Graph a -> ID -> T.Tree ID
-generate g i = T.Node i
-    ( T.Node (eps n) []
-    : map (generate g) (edges n) )
-  where
-    n = nodeBy i g
-
-type SetM a = S.State IS.IntSet a
-
-run :: SetM a -> a
-run act = S.evalState act IS.empty
-
-contains :: ID -> SetM Bool
-contains i = IS.member i <$> S.get
-
-include :: ID -> SetM ()
-include i = S.modify (IS.insert i)
-
-prune :: T.Tree ID -> T.Tree ID
-prune t = head $ run (chop [t])
-
-chop :: T.Forest ID -> SetM (T.Forest ID)
-chop [] = return []
-chop (T.Node v ts : us) = do
-    visited <- contains v
-    if visited then
-        chop us
-    else do
-        include v
-        as <- chop ts
-        bs <- chop us
-        return (T.Node v as : bs)
+-- -- | Construct a graph from a list of node/ID pairs and a root ID.
+-- -- Identifiers must be consistent with edges outgoing from
+-- -- individual nodes.
+-- fromNodes :: Ord a => [(Node a, ID)] -> ID -> Graph a
+-- fromNodes xs rootID = graph
+--   where
+--     graph = Graph
+--         (M.fromList xs)
+--         IS.empty
+--         (IM.fromList $ map swap xs)
+--         ( foldl' updIngo (IM.singleton rootID 1)
+--             $ topSort graph rootID )
+--     swap (x, y) = (y, x)
+--     updIngo m i =
+--         let n = nodeBy i graph
+--             ingo = m IM.! i
+--         in  foldl' (push ingo) m (edges n)
+--     push x m j = IM.adjust (+x) j m
+-- 
+-- postorder :: T.Tree a -> [a] -> [a]
+-- postorder (T.Node a ts) = postorderF ts . (a :)
+-- 
+-- postorderF :: T.Forest a -> [a] -> [a]
+-- postorderF ts = foldr (.) id $ map postorder ts
+-- 
+-- postOrd :: Graph a -> ID -> [ID]
+-- postOrd g i = postorder (dfs g i) []
+-- 
+-- -- | Topological sort given a root ID.
+-- topSort :: Graph a -> ID -> [ID]
+-- topSort g = reverse . postOrd g
+-- 
+-- -- | Depth first search starting with given ID.
+-- dfs :: Graph a -> ID -> T.Tree ID
+-- dfs g = prune . generate g
+-- 
+-- generate :: Graph a -> ID -> T.Tree ID
+-- generate g i = T.Node i
+--     ( T.Node (eps n) []
+--     : map (generate g) (edges n) )
+--   where
+--     n = nodeBy i g
+-- 
+-- type SetM a = S.State IS.IntSet a
+-- 
+-- run :: SetM a -> a
+-- run act = S.evalState act IS.empty
+-- 
+-- contains :: ID -> SetM Bool
+-- contains i = IS.member i <$> S.get
+-- 
+-- include :: ID -> SetM ()
+-- include i = S.modify (IS.insert i)
+-- 
+-- prune :: T.Tree ID -> T.Tree ID
+-- prune t = head $ run (chop [t])
+-- 
+-- chop :: T.Forest ID -> SetM (T.Forest ID)
+-- chop [] = return []
+-- chop (T.Node v ts : us) = do
+--     visited <- contains v
+--     if visited then
+--         chop us
+--     else do
+--         include v
+--         as <- chop ts
+--         bs <- chop us
+--         return (T.Node v as : bs)

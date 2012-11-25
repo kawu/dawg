@@ -13,6 +13,7 @@ module Data.DAWG.Node
 , trans
 , edges
 , subst
+, toGeneric
 -- * Edge
 , Edge
 , to
@@ -22,10 +23,12 @@ module Data.DAWG.Node
 ) where
 
 import Control.Applicative ((<$>), (<*>))
+import Control.Arrow (second)
 import Data.Binary (Binary, Get, put, get)
 import Data.Vector.Unboxed (Unbox)
 
 import qualified Data.DAWG.VMap as M
+import qualified Data.DAWG.Node.Specialized as N
 
 -- | Node identifier.
 type ID = Int
@@ -104,3 +107,10 @@ subst :: Unbox b => Sym -> b -> Node a b -> Node a b
 subst x e (Branch w es) = Branch w (M.insert x e es)
 subst _ _ l             = l
 {-# INLINE subst #-}
+
+-- Yield generic version of a specialized node.
+toGeneric :: N.Node a -> Node a (Edge ())
+toGeneric N.Leaf{..}    = Leaf value
+toGeneric N.Branch{..}  = Branch eps (annEdges edgeMap) where
+    annEdges = M.fromList . map annEdge . M.toList
+    annEdge = second (labeled ())

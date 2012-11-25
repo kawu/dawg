@@ -44,7 +44,7 @@ module Data.DAWG.Static
 
 import Prelude hiding (lookup)
 import Control.Applicative ((<$), (<$>), (<|>))
-import Control.Arrow (first, second)
+import Control.Arrow (first)
 import Data.Binary (Binary)
 import Data.Vector.Binary ()
 import Data.Vector.Unboxed (Unbox)
@@ -180,7 +180,7 @@ weigh d = (DAWG . V.fromList)
 -- | Construct immutable version of the automaton.
 freeze :: D.DAWG a b -> DAWG a b ()
 freeze d = DAWG . V.fromList $
-    map (nodeGeneric . NS.reIdent newID . oldBy)
+    map (N.toGeneric . NS.reIdent newID . oldBy)
         (M.elems (inverse old2new))
   where
     -- Map from old to new identifiers.
@@ -190,12 +190,6 @@ freeze d = DAWG . V.fromList $
     nodeIDs = filter (/= D.root d) . map fst . M.assocs . I.nodeMap . D.graph
     -- Non-frozen node by given identifier.
     oldBy i = I.nodeBy i (D.graph d)
-    -- Yield generic version of a specialized node.
-    nodeGeneric NS.Leaf{..}     = N.Leaf value
-    nodeGeneric NS.Branch{..}   = N.Branch eps (annEdges edgeMap)
-    -- Add () annotations on edges.
-    annEdges = VM.fromList . map annEdge . VM.toList
-    annEdge = second (labeled ())
         
 -- | Inverse of the map.
 inverse :: M.IntMap Int -> M.IntMap Int

@@ -34,14 +34,15 @@ import Data.Binary (Binary, put, get)
 import qualified Control.Monad.State.Strict as S
 
 import Data.DAWG.Internal (Graph)
-import Data.DAWG.Node.Specialized hiding (Node)
-import qualified Data.DAWG.Node.Specialized as N
 import qualified Data.DAWG.Internal as I
 import qualified Data.DAWG.VMap as V
 
-type GraphM a b = S.State (Graph (Maybe a)) b
+import Data.DAWG.Node.Specialized hiding (Node)
+import qualified Data.DAWG.Node.Specialized as N
 
 type Node a = N.Node (Maybe a)
+
+type GraphM a b = S.State (Graph (Maybe a)) b
 
 mkState :: (Graph a -> Graph a) -> Graph a -> ((), Graph a)
 mkState f g = ((), f g)
