@@ -43,7 +43,7 @@ import qualified Data.DAWG.Node as N
 
 type Node a = N.Node (Maybe a) ()
 
-type GraphM a b = S.State (Graph (Maybe a)) b
+type GraphM a b = S.State (Graph (Node a)) b
 
 mkState :: (Graph a -> Graph a) -> Graph a -> ((), Graph a)
 mkState f g = ((), f g)
@@ -131,7 +131,7 @@ lookupM (x:xs) i = do
         Just j  -> lookupM xs j
         Nothing -> return Nothing
 
-assocsAcc :: Graph (Maybe a) -> ID -> [([Int], a)]
+assocsAcc :: Graph (Node a) -> ID -> [([Int], a)]
 assocsAcc g i =
     here w ++ concatMap there (trans n)
   where
@@ -145,7 +145,7 @@ assocsAcc g i =
 -- | A directed acyclic word graph with phantom type @a@ representing
 -- type of alphabet elements.
 data DAWG a b = DAWG
-    { graph :: !(Graph (Maybe b))
+    { graph :: !(Graph (Node b))
     , root  :: !ID }
     deriving (Show, Eq, Ord)
 

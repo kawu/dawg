@@ -24,10 +24,7 @@ import qualified Data.IntSet as IS
 import qualified Data.IntMap as IM
 -- import qualified Control.Monad.State.Strict as S
 
-import Data.DAWG.Node hiding (Node)
-import qualified Data.DAWG.Node as N
-
-type Node a = N.Node a ()
+type ID = Int
 
 -- | A set of nodes.  To every node a unique identifier is assigned.
 -- Invariants: 
@@ -41,13 +38,13 @@ type Node a = N.Node a ()
 --
 -- TODO: Is it possible to merge 'freeIDs' with 'ingoMap' to reduce
 -- the memory footprint?
-data Graph a = Graph {
+data Graph n = Graph {
     -- | Map from nodes to IDs.
-      idMap     :: !(M.Map (Node a) ID)
+      idMap     :: !(M.Map n ID)
     -- | Set of free IDs.
     , freeIDs   :: !IS.IntSet
     -- | Map from IDs to nodes. 
-    , nodeMap   :: !(IM.IntMap (Node a))
+    , nodeMap   :: !(IM.IntMap n)
     -- | Number of ingoing paths (different paths from the root
     -- to the given node) for each node ID in the graph.
     -- The number of ingoing paths can be also interpreted as
@@ -56,7 +53,7 @@ data Graph a = Graph {
     , ingoMap   :: !(IM.IntMap Int) }
     deriving (Show, Eq, Ord)
 
-instance (Ord a, Binary a) => Binary (Graph a) where
+instance (Ord n, Binary n) => Binary (Graph n) where
     put Graph{..} = do
     	put idMap
 	put freeIDs
@@ -65,23 +62,23 @@ instance (Ord a, Binary a) => Binary (Graph a) where
     get = Graph <$> get <*> get <*> get <*> get
 
 -- | Empty graph.
-empty :: Graph a
+empty :: Graph n
 empty = Graph M.empty IS.empty IM.empty IM.empty
 
 -- | Size of the graph (number of nodes).
-size :: Graph a -> Int
+size :: Graph n -> Int
 size = M.size . idMap
 
 -- | Node with the given identifier.
-nodeBy :: ID -> Graph a -> Node a
+nodeBy :: ID -> Graph n -> n
 nodeBy i g = nodeMap g IM.! i
 
 -- | Retrieve the node identifier.
-nodeID :: Ord a => Node a -> Graph a -> ID
+nodeID :: Ord n => n -> Graph n -> ID
 nodeID n g = idMap g M.! n
 
 -- | Add new graph node.
-newNode :: Ord a => Node a -> Graph a -> (ID, Graph a)
+newNode :: Ord n => n -> Graph n -> (ID, Graph n)
 newNode n Graph{..} =
     (i, Graph idMap' freeIDs' nodeMap' ingoMap')
   where
@@ -93,7 +90,7 @@ newNode n Graph{..} =
         else IS.deleteFindMin freeIDs
 
 -- | Remove node from the graph.
-remNode :: Ord a => ID -> Graph a -> Graph a
+remNode :: Ord n => ID -> Graph n -> Graph n
 remNode i Graph{..} =
     Graph idMap' freeIDs' nodeMap' ingoMap'
   where
@@ -104,12 +101,12 @@ remNode i Graph{..} =
     n           = nodeMap IM.! i
 
 -- | Increment the number of ingoing paths.
-incIngo :: ID -> Graph a -> Graph a
+incIngo :: ID -> Graph n -> Graph n
 incIngo i g = g { ingoMap = IM.insertWith' (+) i 1 (ingoMap g) }
 
 -- | Decrement the number of ingoing paths and return
 -- the resulting number.
-decIngo :: ID -> Graph a -> (Int, Graph a)
+decIngo :: ID -> Graph n -> (Int, Graph n)
 decIngo i g =
     let k = (ingoMap g IM.! i) - 1
     in  (k, g { ingoMap = IM.insert i k (ingoMap g) })
@@ -119,7 +116,7 @@ decIngo i g =
 -- NOTE: Number of ingoing paths will not be changed for any descendants
 -- of the node, so the operation alone will not ensure that properties
 -- of the graph are preserved.
-insert :: Ord a => Node a -> Graph a -> (ID, Graph a)
+insert :: Ord n => n -> Graph n -> (ID, Graph n)
 insert n g = case M.lookup n (idMap g) of
     Just i  -> (i, incIngo i g)
     Nothing -> newNode n g
@@ -129,7 +126,7 @@ insert n g = case M.lookup n (idMap g) of
 -- NOTE: The function does not delete descendant nodes which may become
 -- inaccesible nor does it change the number of ingoing paths for any
 -- descendant of the node.
-delete :: Ord a => Node a -> Graph a -> Graph a
+delete :: Ord n => n -> Graph n -> Graph n
 delete n g = if num == 0
     then remNode i g'
     else g'
