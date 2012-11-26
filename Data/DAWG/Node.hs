@@ -1,4 +1,6 @@
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 -- | Internal representation of automata nodes.
 
@@ -21,6 +23,7 @@ import qualified Data.Vector.Unboxed as U
 import Data.DAWG.Types
 import Data.DAWG.Trans (Trans)
 import qualified Data.DAWG.Trans as T
+import qualified Data.DAWG.Trans.Vector as V
 
 -- | Two nodes (states) belong to the same equivalence class (and,
 -- consequently, they must be represented as one node in the graph)
@@ -43,7 +46,10 @@ data Node t a b
         -- | Labels corresponding to individual edges.
         , labelVect :: !(U.Vector b) }
     | Leaf { value  :: !a }
-    deriving (Show, Eq, Ord)
+    deriving (Show)
+
+deriving instance (Eq a, Eq b, U.Unbox b)   => Eq (Node V.Trans a b)
+deriving instance (Ord a, Ord b, U.Unbox b) => Ord (Node V.Trans a b)
 
 instance (U.Unbox b, Binary t, Binary a, Binary b) => Binary (Node t a b) where
     put Branch{..} = put (1 :: Int) >> put eps >> put transMap >> put labelVect
