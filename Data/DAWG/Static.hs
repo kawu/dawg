@@ -1,6 +1,9 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 -- | The module implements /directed acyclic word graphs/ (DAWGs) internaly
 -- represented as /minimal acyclic deterministic finite-state automata/.
@@ -46,7 +49,7 @@ module Data.DAWG.Static
 import Prelude hiding (lookup)
 import Control.Applicative ((<$), (<$>), (<|>))
 import Control.Arrow (first)
-import Data.Binary (Binary)
+import Data.Binary (Binary, put, get)
 import Data.Vector.Binary ()
 import Data.Vector.Unboxed (Unbox)
 import qualified Data.IntMap as M
@@ -56,6 +59,7 @@ import qualified Data.Vector.Unboxed as U
 import Data.DAWG.Types
 import Data.DAWG.Trans (Trans)
 import qualified Data.DAWG.Trans as T
+import qualified Data.DAWG.Trans.Vector as VT
 import qualified Data.DAWG.Node as N
 import qualified Data.DAWG.Graph as G
 import qualified Data.DAWG.Internal as D
@@ -63,11 +67,21 @@ import qualified Data.DAWG.Util as Util
 
 type Node t a b = N.Node t (Maybe a) b
 
+class (Ord (Node t a b), Trans t) => MkNode t a b where
+instance (Ord (Node t a b), Trans t) => MkNode t a b where
+
 -- | @DAWG t a b c@ constitutes an automaton with alphabet symbols of type /a/,
 -- node values of type /Maybe b/ and additional transition labels of type /c/.
 -- Root is stored on the first position of the array.
 newtype DAWG t a b c = DAWG { unDAWG :: V.Vector (Node t b c) }
-    deriving (Show, Eq, Ord, Binary)
+    deriving (Show)
+
+deriving instance (Eq b, Eq c, Unbox c)     => Eq  (DAWG VT.Trans a b c)
+deriving instance (Ord b, Ord c, Unbox c)   => Ord (DAWG VT.Trans a b c)
+
+instance (Binary t, Binary b, Binary c, Unbox c) => Binary (DAWG t a b c) where
+    put = put . unDAWG
+    get = DAWG <$> get
 
 -- | Empty DAWG.
 empty :: (Trans t, Unbox c) => DAWG t a b c
@@ -131,29 +145,36 @@ elems = map snd . assocs'I 0
 -- | Construct 'DAWG' from the list of (word, value) pairs.
 -- First a 'D.DAWG' is created and then it is frozen using
 -- the 'freeze' function.
-fromList :: (Enum a, Trans t, Ord b) => [([a], b)] -> DAWG t a b ()
+fromList
+    :: (Enum a, Ord (Node t b ()), Trans t)
+    => [([a], b)] -> DAWG t a b ()
 fromList = freeze . D.fromList
 {-# SPECIALIZE fromList
-        :: (Trans t, Ord b) => [(String, b)] -> DAWG t Char b () #-}
+        :: (Ord (Node t b ()), Trans t)
+        => [(String, b)] -> DAWG t Char b () #-}
 
 -- | Construct DAWG from the list of (word, value) pairs
 -- with a combining function.  The combining function is
 -- applied strictly. First a 'D.DAWG' is created and then
 -- it is frozen using the 'freeze' function.
 fromListWith
-    :: (Enum a, Trans t, Ord b) => (b -> b -> b)
-    -> [([a], b)] -> DAWG t a b ()
+    :: (Enum a, Ord (Node t b ()), Trans t)
+    => (b -> b -> b) -> [([a], b)] -> DAWG t a b ()
 fromListWith f = freeze . D.fromListWith f
 {-# SPECIALIZE fromListWith
-        :: (Trans t, Ord b) => (b -> b -> b)
-        -> [(String, b)] -> DAWG t Char b () #-}
+        :: (Ord (Node t b ()), Trans t)
+        => (b -> b -> b) -> [(String, b)] -> DAWG t Char b () #-}
 
 -- | Make DAWG from the list of words.  Annotate each word with
 -- the @()@ value.  First a 'D.DAWG' is created and then it is frozen
 -- using the 'freeze' function.
-fromLang :: (Enum a, Trans t) => [[a]] -> DAWG t a () ()
+fromLang 
+    :: (Enum a, Ord (Node t () ()), Trans t)
+    => [[a]] -> DAWG t a () ()
 fromLang = freeze . D.fromLang
-{-# SPECIALIZE fromLang :: Trans t => [String] -> DAWG t Char () () #-}
+{-# SPECIALIZE fromLang
+        :: (Ord (Node t () ()), Trans t)
+        => [String] -> DAWG t Char () () #-}
 
 -- | Weight of a node corresponds to the number of final states
 -- reachable from the node.  Weight of an edge is a sum of weights
