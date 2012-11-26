@@ -31,12 +31,11 @@ library
 
     exposed-modules:
         Data.DAWG
+      , Data.DAWG.Types
       , Data.DAWG.Static
       , Data.DAWG.Trans
       , Data.DAWG.Trans.Vector
-
-    other-modules:
-        Data.DAWG.Node
+      , Data.DAWG.Node
       , Data.DAWG.Graph
       , Data.DAWG.Internal
       , Data.DAWG.Util

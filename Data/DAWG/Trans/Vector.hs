@@ -3,7 +3,7 @@
 -- | A vector representation of a transition map.
 
 module Data.DAWG.Trans.Vector
-( Trans
+( Trans (unTrans)
 ) where
 
 import Prelude hiding (lookup)
