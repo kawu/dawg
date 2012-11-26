@@ -32,17 +32,20 @@ library
     exposed-modules:
         Data.DAWG
       , Data.DAWG.Types
-      , Data.DAWG.Static
+      -- , Data.DAWG.Static
       , Data.DAWG.Trans
-      , Data.DAWG.Trans.Vector
+      -- , Data.DAWG.Trans.Vector
+      , Data.DAWG.Trans.Map
+      -- , Data.DAWG.Trans.IntMap
 
     other-modules:
         Data.DAWG.Node
       , Data.DAWG.Graph
       , Data.DAWG.Internal
       , Data.DAWG.Util
+      , Data.DAWG.HashMap
 
-    ghc-options: -Wall -O2
+    ghc-options: -Wall -O2 -auto
 
 source-repository head
     type: git

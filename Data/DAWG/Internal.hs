@@ -1,6 +1,5 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 
@@ -13,6 +12,7 @@ module Data.DAWG.Internal
 (
 -- * DAWG type
   DAWG (..)
+, MkNode
 -- * Query
 , numStates
 , lookup
@@ -44,12 +44,14 @@ import Data.DAWG.Types
 import Data.DAWG.Graph (Graph)
 import Data.DAWG.Trans (Trans)
 import qualified Data.DAWG.Trans as T
-import qualified Data.DAWG.Trans.Vector as VT
 import qualified Data.DAWG.Node as N
 import qualified Data.DAWG.Graph as G
 
 type Node t a = N.Node t (Maybe a) ()
 
+-- | Is /t/ a valid transition map within the context of
+-- /a/-valued automata nodes?  All transition implementations
+-- provided by the library are instances of this class.
 class (Ord (Node t a), Trans t) => MkNode t a where
 instance (Ord (Node t a), Trans t) => MkNode t a where
 
@@ -160,9 +162,6 @@ data DAWG t a b = DAWG
     { graph :: !(Graph (Node t b))
     , root  :: !ID }
     deriving (Show)
-
-deriving instance Eq b  => Eq  (DAWG VT.Trans a b)
-deriving instance Ord b => Ord (DAWG VT.Trans a b)
 
 instance (MkNode t b, Binary t, Binary b) => Binary (DAWG t a b) where
     put d = do

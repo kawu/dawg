@@ -1,5 +1,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
 -- | Internal representation of automata nodes.
@@ -22,8 +24,12 @@ import qualified Data.Vector.Unboxed as U
 
 import Data.DAWG.Types
 import Data.DAWG.Trans (Trans)
+import Data.DAWG.Util (combine)
+import Data.DAWG.HashMap (Hash, hash)
 import qualified Data.DAWG.Trans as T
-import qualified Data.DAWG.Trans.Vector as V
+-- import qualified Data.DAWG.Trans.Vector as TV
+-- import qualified Data.DAWG.Trans.IntMap as TI
+import qualified Data.DAWG.Trans.Map as TM
 
 -- | Two nodes (states) belong to the same equivalence class (and,
 -- consequently, they must be represented as one node in the graph)
@@ -48,8 +54,16 @@ data Node t a b
     | Leaf { value  :: !a }
     deriving (Show)
 
-deriving instance (Eq a, Eq b, U.Unbox b)   => Eq (Node V.Trans a b)
-deriving instance (Ord a, Ord b, U.Unbox b) => Ord (Node V.Trans a b)
+-- deriving instance (Eq a, Eq b, U.Unbox b)   => Eq (Node TV.Trans a b)
+-- deriving instance (Ord a, Ord b, U.Unbox b) => Ord (Node TV.Trans a b)
+-- deriving instance (Eq a, Eq b, U.Unbox b)   => Eq (Node TI.Trans a b)
+-- deriving instance (Ord a, Ord b, U.Unbox b) => Ord (Node TI.Trans a b)
+deriving instance (Eq a, Eq b, U.Unbox b)   => Eq (Node TM.Trans a b)
+deriving instance (Ord a, Ord b, U.Unbox b) => Ord (Node TM.Trans a b)
+
+instance (Trans t, Ord (Node t a b)) => Hash (Node t a b) where
+    hash Branch{..} = combine eps (T.hash transMap)
+    hash Leaf{..}   = (-1)
 
 instance (U.Unbox b, Binary t, Binary a, Binary b) => Binary (Node t a b) where
     put Branch{..} = put (1 :: Int) >> put eps >> put transMap >> put labelVect

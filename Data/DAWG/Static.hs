@@ -67,9 +67,6 @@ import qualified Data.DAWG.Util as Util
 
 type Node t a b = N.Node t (Maybe a) b
 
-class (Ord (Node t a b), Trans t) => MkNode t a b where
-instance (Ord (Node t a b), Trans t) => MkNode t a b where
-
 -- | @DAWG t a b c@ constitutes an automaton with alphabet symbols of type /a/,
 -- node values of type /Maybe b/ and additional transition labels of type /c/.
 -- Root is stored on the first position of the array.
@@ -146,35 +143,32 @@ elems = map snd . assocs'I 0
 -- First a 'D.DAWG' is created and then it is frozen using
 -- the 'freeze' function.
 fromList
-    :: (Enum a, Ord (Node t b ()), Trans t)
+    :: (Enum a, D.MkNode t b)
     => [([a], b)] -> DAWG t a b ()
 fromList = freeze . D.fromList
 {-# SPECIALIZE fromList
-        :: (Ord (Node t b ()), Trans t)
-        => [(String, b)] -> DAWG t Char b () #-}
+        :: D.MkNode t b => [(String, b)] -> DAWG t Char b () #-}
 
 -- | Construct DAWG from the list of (word, value) pairs
 -- with a combining function.  The combining function is
 -- applied strictly. First a 'D.DAWG' is created and then
 -- it is frozen using the 'freeze' function.
 fromListWith
-    :: (Enum a, Ord (Node t b ()), Trans t)
+    :: (Enum a, D.MkNode t b)
     => (b -> b -> b) -> [([a], b)] -> DAWG t a b ()
 fromListWith f = freeze . D.fromListWith f
 {-# SPECIALIZE fromListWith
-        :: (Ord (Node t b ()), Trans t)
-        => (b -> b -> b) -> [(String, b)] -> DAWG t Char b () #-}
+        :: D.MkNode t b => (b -> b -> b)
+        -> [(String, b)] -> DAWG t Char b () #-}
 
 -- | Make DAWG from the list of words.  Annotate each word with
 -- the @()@ value.  First a 'D.DAWG' is created and then it is frozen
 -- using the 'freeze' function.
 fromLang 
-    :: (Enum a, Ord (Node t () ()), Trans t)
+    :: (Enum a, D.MkNode t ())
     => [[a]] -> DAWG t a () ()
 fromLang = freeze . D.fromLang
-{-# SPECIALIZE fromLang
-        :: (Ord (Node t () ()), Trans t)
-        => [String] -> DAWG t Char () () #-}
+{-# SPECIALIZE fromLang :: D.MkNode t () => [String] -> DAWG t Char () () #-}
 
 -- | Weight of a node corresponds to the number of final states
 -- reachable from the node.  Weight of an edge is a sum of weights

@@ -7,6 +7,7 @@ module Data.DAWG
 (
 -- * DAWG type
   DAWG
+, MkNode
 -- * Query
 , numStates
 , lookup
