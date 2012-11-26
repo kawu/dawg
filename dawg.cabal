@@ -30,16 +30,16 @@ library
       , mtl
 
     exposed-modules:
-        Data.DAWG.Node.Class
-      , Data.DAWG.Internal
---         Data.DAWG
---       , Data.DAWG.Static
+        Data.DAWG
+      , Data.DAWG.Static
+      , Data.DAWG.Trans
+      , Data.DAWG.Trans.Vector
 
     other-modules:
-        Data.DAWG.VMap
+        Data.DAWG.Node
       , Data.DAWG.Graph
---       , Data.DAWG.Node
---       , Data.DAWG.Internal
+      , Data.DAWG.Internal
+      , Data.DAWG.Util
 
     ghc-options: -Wall -O2
 

@@ -3,24 +3,24 @@
 -- | Internal representation of automata nodes.
 
 module Data.DAWG.Node
-( Sym
-, Node (..)
-, ID
+( Node (..)
 , onSym
 , onSym'
-, trans
 , edges
-, subst
-, reIdent
+, children
+, insert
+, reID
 ) where
 
 import Control.Applicative ((<$>), (<*>))
 import Control.Arrow (second)
 import Data.Binary (Binary, Get, put, get)
+import Data.Vector.Binary ()
 import qualified Data.Vector.Unboxed as U
 
 import Data.DAWG.Types
-import qualified Data.DAWG.VMap as M
+import Data.DAWG.Trans (Trans)
+import qualified Data.DAWG.Trans as T
 
 -- | Two nodes (states) belong to the same equivalence class (and,
 -- consequently, they must be represented as one node in the graph)
@@ -34,19 +34,19 @@ import qualified Data.DAWG.VMap as M
 --
 -- Invariant: the 'eps' identifier always points to the 'Leaf' node.
 -- Edges in the 'edgeMap', on the other hand, point to 'Branch' nodes.
-data Node a b 
+data Node t a b
     = Branch {
         -- | Epsilon transition.
           eps       :: {-# UNPACK #-} !ID
-        -- | Edges outgoing from the node.
-        , edgeMap   :: !(M.VMap ID)
+        -- | Transition map (outgoing edges).
+        , transMap  :: !t
         -- | Labels corresponding to individual edges.
         , labelVect :: !(U.Vector b) }
     | Leaf { value  :: !a }
     deriving (Show, Eq, Ord)
 
-instance (U.Unbox b, Binary a, Binary b) => Binary (Node a b) where
-    put Branch{..} = put (1 :: Int) >> put eps >> put edgeMap >> put labelVect
+instance (U.Unbox b, Binary t, Binary a, Binary b) => Binary (Node t a b) where
+    put Branch{..} = put (1 :: Int) >> put eps >> put transMap >> put labelVect
     put Leaf{..}   = put (2 :: Int) >> put value
     get = do
         x <- get :: Get Int
@@ -55,40 +55,40 @@ instance (U.Unbox b, Binary a, Binary b) => Binary (Node a b) where
             _ -> Leaf <$> get
 
 -- | Transition function.
-onSym :: Sym -> Node a b -> Maybe ID
-onSym x (Branch _ es _) = M.lookup x es
+onSym :: Trans t => Sym -> Node t a b -> Maybe ID
+onSym x (Branch _ t _)  = T.lookup x t
 onSym _ (Leaf _)        = Nothing
 {-# INLINE onSym #-}
 
 -- | Transition function.
-onSym' :: U.Unbox b => Sym -> Node a b -> Maybe (ID, b)
-onSym' x (Branch _ es ls)   = do
-    k <- M.index x es
-    (,) <$> (snd <$> M.byIndex k es)
+onSym' :: (Trans t, U.Unbox b) => Sym -> Node t a b -> Maybe (ID, b)
+onSym' x (Branch _ t ls)   = do
+    k <- T.index x t
+    (,) <$> (snd <$> T.byIndex k t)
         <*> ls U.!? k
 onSym' _ (Leaf _)           = Nothing
 {-# INLINE onSym' #-}
 
 -- | List of symbol/edge pairs outgoing from the node.
-trans :: Node a b -> [(Sym, ID)]
-trans (Branch _ es _)   = M.toList es
-trans (Leaf _)          = []
-{-# INLINE trans #-}
-
--- | List of outgoing edges.
-edges :: Node a b -> [ID]
-edges = map snd . trans
+edges :: Trans t => Node t a b -> [(Sym, ID)]
+edges (Branch _ t _)    = T.toList t
+edges (Leaf _)          = []
 {-# INLINE edges #-}
 
+-- | List of children identifiers.
+children :: Trans t => Node t a b -> [ID]
+children = map snd . edges
+{-# INLINE children #-}
+
 -- | Substitue edge determined by a given symbol.
-subst :: Sym -> ID -> Node a b -> Node a b
-subst x i (Branch w es ts)  = Branch w (M.insert x i es) ts
-subst _ _ l                 = l
-{-# INLINE subst #-}
+insert :: Trans t => Sym -> ID -> Node t a b -> Node t a b
+insert x i (Branch w t ls)  = Branch w (T.insert x i t) ls
+insert _ _ l                = l
+{-# INLINE insert #-}
 
 -- | Assign new identifiers.
-reIdent :: (ID -> ID) -> Node a b -> Node a b
-reIdent _ (Leaf x)          = Leaf x
-reIdent f (Branch e es ts)  =
-    let reEdges = M.fromList . map (second f) . M.toList
-    in  Branch (f e) (reEdges es) ts
+reID :: Trans t => (ID -> ID) -> Node t a b -> Node t a b
+reID _ (Leaf x)         = Leaf x
+reID f (Branch e t ls)  =
+    let reTrans = T.fromList . map (second f) . T.toList
+    in  Branch (f e) (reTrans t) ls

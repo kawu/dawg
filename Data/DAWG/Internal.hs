@@ -5,25 +5,25 @@
 
 module Data.DAWG.Internal
 (
--- -- * DAWG type
---   DAWG (..)
--- -- * Query
--- , numStates
--- , lookup
--- -- * Construction
--- , empty
--- , fromList
--- , fromListWith
--- , fromLang
--- -- ** Insertion
--- , insert
--- , insertWith
--- -- ** Deletion
--- , delete
--- -- * Conversion
--- , assocs
--- , keys
--- , elems
+-- * DAWG type
+  DAWG (..)
+-- * Query
+, numStates
+, lookup
+-- * Construction
+, empty
+, fromList
+, fromListWith
+, fromLang
+-- ** Insertion
+, insert
+, insertWith
+-- ** Deletion
+, delete
+-- * Conversion
+, assocs
+, keys
+, elems
 ) where
 
 import Prelude hiding (lookup)
@@ -36,46 +36,38 @@ import qualified Control.Monad.State.Strict as S
 
 import Data.DAWG.Types
 import Data.DAWG.Graph (Graph)
-import Data.DAWG.Node.Class (Node)
-import qualified Data.DAWG.Node.Class as N
+import Data.DAWG.Trans (Trans)
+import qualified Data.DAWG.Trans as T
+import qualified Data.DAWG.Node as N
 import qualified Data.DAWG.Graph as G
-import qualified Data.DAWG.VMap as V
 
--- import Data.DAWG.Node hiding (Node)
--- import qualified Data.DAWG.Node as N
+type Node t a = N.Node t (Maybe a) ()
 
--- type Node a = N.Node (Maybe a) ()
--- 
--- type GraphM a b = S.State (Graph (Node a)) b
-type GraphM n a b = S.State (Graph (n a)) b
+type GraphM t a b = S.State (Graph (Node t a)) b
 
 mkState :: (Graph a -> Graph a) -> Graph a -> ((), Graph a)
 mkState f g = ((), f g)
 
 -- | Leaf node with no children and 'Nothing' value.
-insertLeaf :: Node n a => GraphM n a ID 
+insertLeaf :: (Ord a, Trans t) => GraphM t a ID
 insertLeaf = do
-    i <- insertNode (N.leaf Nothing)
-    insertNode (N.branch i)
--- insertLeaf :: Node n a => GraphM n a ID 
--- insertLeaf = do
---     i <- insertNode (N.Leaf Nothing)
---     insertNode (N.Branch i V.empty U.empty)
+    i <- insertNode (N.Leaf Nothing)
+    insertNode (N.Branch i T.empty U.empty)
 
 -- | Return node with the given identifier.
-nodeBy :: Node n a => ID -> GraphM n a (n a)
+nodeBy :: ID -> GraphM t a (Node t a)
 nodeBy i = G.nodeBy i <$> S.get
 
 -- Evaluate the 'G.insert' function within the monad.
-insertNode :: Node n a => n a -> GraphM n a ID
+insertNode :: (Ord a, Ord t) => Node t a -> GraphM t a ID
 insertNode = S.state . G.insert
 
 -- Evaluate the 'G.delete' function within the monad.
-deleteNode :: Node n a => n a -> GraphM n a ()
+deleteNode :: (Ord a, Ord t) => Node t a -> GraphM t a ()
 deleteNode = S.state . mkState . G.delete
 
 -- | Invariant: the identifier points to the 'Branch' node.
-insertM :: Node n a => [Sym] -> a -> ID -> GraphM n a ID
+insertM :: (Ord a, Trans t) => [Sym] -> a -> ID -> GraphM t a ID
 insertM (x:xs) y i = do
     n <- nodeBy i
     j <- case N.onSym x n of
@@ -83,16 +75,18 @@ insertM (x:xs) y i = do
         Nothing -> insertLeaf
     k <- insertM xs y j
     deleteNode n
-    insertNode (N.subst x k n)
+    insertNode (N.insert x k n)
 insertM [] y i = do
     n <- nodeBy i
     w <- nodeBy (N.eps n)
     deleteNode w
     deleteNode n
-    j <- insertNode (N.leaf $ Just y)
-    insertNode (N.withEps j n)
+    j <- insertNode (N.Leaf $ Just y)
+    insertNode (n { N.eps = j })
 
-insertWithM :: Node n a => (a -> a -> a) -> [Sym] -> a -> ID -> GraphM n a ID
+insertWithM
+    :: (Ord a, Trans t) => (a -> a -> a)
+    -> [Sym] -> a -> ID -> GraphM t a ID
 insertWithM f (x:xs) y i = do
     n <- nodeBy i
     j <- case N.onSym x n of
@@ -100,7 +94,7 @@ insertWithM f (x:xs) y i = do
         Nothing -> insertLeaf
     k <- insertWithM f xs y j
     deleteNode n
-    insertNode (N.subst x k n)
+    insertNode (N.insert x k n)
 insertWithM f [] y i = do
     n <- nodeBy i
     w <- nodeBy (N.eps n)
@@ -109,10 +103,10 @@ insertWithM f [] y i = do
     let y'new = case N.value w of
             Just y' -> f y y'
             Nothing -> y
-    j <- insertNode (N.leaf $ Just y'new)
-    insertNode (N.withEps j n)
+    j <- insertNode (N.Leaf $ Just y'new)
+    insertNode (n { N.eps = j })
 
-deleteM :: Node n a => [Sym] -> ID -> GraphM n a ID
+deleteM :: (Ord a, Trans t) => [Sym] -> ID -> GraphM t a ID
 deleteM (x:xs) i = do
     n <- nodeBy i
     case N.onSym x n of
@@ -120,16 +114,16 @@ deleteM (x:xs) i = do
         Just j  -> do
             k <- deleteM xs j
             deleteNode n
-            insertNode (N.subst x k n)
+            insertNode (N.insert x k n)
 deleteM [] i = do
     n <- nodeBy i
     w <- nodeBy (N.eps n)
     deleteNode w
     deleteNode n
     j <- insertLeaf
-    insertNode (N.withEps j n)
+    insertNode (n { N.eps = j })
     
-lookupM :: Node n a => [Sym] -> ID -> GraphM n a (Maybe a)
+lookupM :: Trans t => [Sym] -> ID -> GraphM t a (Maybe a)
 lookupM [] i = do
     j <- N.eps <$> nodeBy i
     N.value <$> nodeBy j
@@ -139,7 +133,7 @@ lookupM (x:xs) i = do
         Just j  -> lookupM xs j
         Nothing -> return Nothing
 
-assocsAcc :: Node n a => Graph (n a) -> ID -> [([Sym], a)]
+assocsAcc :: Trans t => Graph (Node t a) -> ID -> [([Sym], a)]
 assocsAcc g i =
     here w ++ concatMap there (N.edges n)
   where
@@ -152,106 +146,112 @@ assocsAcc g i =
 
 -- | A directed acyclic word graph with phantom type @a@ representing
 -- type of alphabet elements.
-data DAWG a n b = DAWG
-    { graph :: !(Graph (n b))
+data DAWG t a b = DAWG
+    { graph :: !(Graph (Node t b))
     , root  :: !ID }
     deriving (Show, Eq, Ord)
 
-instance Node n b => Binary (DAWG a n b) where
+instance (Ord t, Binary t, Ord b, Binary b) => Binary (DAWG t a b) where
     put d = do
         put (graph d)
         put (root d)
     get = DAWG <$> get <*> get
 
 -- | Empty DAWG.
-empty :: Node n b => DAWG a n b
+empty :: (Ord b, Trans t) => DAWG t a b
 empty = 
     let (i, g) = S.runState insertLeaf G.empty
     in  DAWG g i
 
 -- | Number of states in the underlying graph.
-numStates :: DAWG a n b -> Int
+numStates :: DAWG t a b -> Int
 numStates = G.size . graph
 
 -- | Insert the (key, value) pair into the DAWG.
-insert :: (Enum a, Node n b) => [a] -> b -> DAWG a n b -> DAWG a n b
+insert :: (Enum a, Ord b, Trans t) => [a] -> b -> DAWG t a b -> DAWG t a b
 insert xs' y d =
     let xs = map fromEnum xs'
         (i, g) = S.runState (insertM xs y $ root d) (graph d)
     in  DAWG g i
 {-# INLINE insert #-}
 {-# SPECIALIZE insert
-        :: Node n b => String -> b
-        -> DAWG Char n b -> DAWG Char n b #-}
+        :: (Ord b, Trans t) => String -> b
+        -> DAWG t Char b -> DAWG t Char b #-}
 
 -- | Insert with a function, combining new value and old value.
 -- 'insertWith' f key value d will insert the pair (key, value) into d if
 -- key does not exist in the DAWG. If the key does exist, the function
 -- will insert the pair (key, f new_value old_value).
 insertWith
-    :: (Enum a, Node n b) => (b -> b -> b)
-    -> [a] -> b -> DAWG a n b -> DAWG a n b
+    :: (Enum a, Ord b, Trans t) => (b -> b -> b)
+    -> [a] -> b -> DAWG t a b -> DAWG t a b
 insertWith f xs' y d =
     let xs = map fromEnum xs'
         (i, g) = S.runState (insertWithM f xs y $ root d) (graph d)
     in  DAWG g i
 {-# SPECIALIZE insertWith
-        :: Node n b => (b -> b -> b) -> String -> b
-        -> DAWG Char n b -> DAWG Char n b #-}
+        :: (Ord b, Trans t) => (b -> b -> b) -> String -> b
+        -> DAWG t Char b -> DAWG t Char b #-}
 
 -- | Delete the key from the DAWG.
-delete :: (Enum a, Node n b) => [a] -> DAWG a n b -> DAWG a n b
+delete :: (Enum a, Ord b, Trans t) => [a] -> DAWG t a b -> DAWG t a b
 delete xs' d =
     let xs = map fromEnum xs'
         (i, g) = S.runState (deleteM xs $ root d) (graph d)
     in  DAWG g i
 {-# SPECIALIZE delete
-        :: Node n b => String -> DAWG Char n b
-        -> DAWG Char n b #-}
+        :: (Ord b, Trans t) => String
+        -> DAWG t Char b -> DAWG t Char b #-}
 
 -- | Find value associated with the key.
-lookup :: (Enum a, Node n b) => [a] -> DAWG a n b -> Maybe b
+lookup :: (Enum a, Ord b, Trans t) => [a] -> DAWG t a b -> Maybe b
 lookup xs' d =
     let xs = map fromEnum xs'
     in  S.evalState (lookupM xs $ root d) (graph d)
-{-# SPECIALIZE lookup :: Node n b => String -> DAWG Char n b -> Maybe b #-}
+{-# SPECIALIZE lookup
+        :: (Ord b, Trans t) => String
+        -> DAWG t Char b -> Maybe b #-}
 
 -- | Return all key/value pairs in the DAWG in ascending key order.
-assocs :: (Enum a, Node n b) => DAWG a n b -> [([a], b)]
+assocs :: (Enum a, Ord b, Trans t) => DAWG t a b -> [([a], b)]
 assocs
     = map (first (map toEnum))
     . (assocsAcc <$> graph <*> root)
-{-# SPECIALIZE assocs :: Node n b => DAWG Char n b -> [(String, b)] #-}
+{-# SPECIALIZE assocs :: (Ord b, Trans t) => DAWG t Char b -> [(String, b)] #-}
 
 -- | Return all keys of the DAWG in ascending order.
-keys :: Enum a => DAWG a b -> [[a]]
+keys :: (Enum a, Ord b, Trans t) => DAWG t a b -> [[a]]
 keys = map fst . assocs
-{-# SPECIALIZE keys :: DAWG Char b -> [String] #-}
+{-# SPECIALIZE keys :: (Ord b, Trans t) => DAWG t Char b -> [String] #-}
 
--- -- | Return all elements of the DAWG in the ascending order of their keys.
--- elems :: DAWG a b -> [b]
--- elems = map snd . (assocsAcc <$> graph <*> root)
--- 
--- -- | Construct DAWG from the list of (word, value) pairs.
--- fromList :: (Enum a, Ord b) => [([a], b)] -> DAWG a b
--- fromList xs =
---     let update t (x, v) = insert x v t
---     in  foldl' update empty xs
--- {-# INLINE fromList #-}
--- {-# SPECIALIZE fromList :: Ord b => [(String, b)] -> DAWG Char b #-}
--- 
--- -- | Construct DAWG from the list of (word, value) pairs
--- -- with a combining function.  The combining function is
--- -- applied strictly.
--- fromListWith :: (Enum a, Ord b) => (b -> b -> b) -> [([a], b)] -> DAWG a b
--- fromListWith f xs =
---     let update t (x, v) = insertWith f x v t
---     in  foldl' update empty xs
--- {-# SPECIALIZE fromListWith :: Ord b => (b -> b -> b)
---         -> [(String, b)] -> DAWG Char b #-}
--- 
--- -- | Make DAWG from the list of words.  Annotate each word with
--- -- the @()@ value.
--- fromLang :: Enum a => [[a]] -> DAWG a ()
--- fromLang xs = fromList [(x, ()) | x <- xs]
--- {-# SPECIALIZE fromLang :: [String] -> DAWG Char () #-}
+-- | Return all elements of the DAWG in the ascending order of their keys.
+elems :: (Ord b, Trans t) => DAWG t a b -> [b]
+elems = map snd . (assocsAcc <$> graph <*> root)
+
+-- | Construct DAWG from the list of (word, value) pairs.
+fromList :: (Enum a, Ord b, Trans t) => [([a], b)] -> DAWG t a b
+fromList xs =
+    let update t (x, v) = insert x v t
+    in  foldl' update empty xs
+{-# INLINE fromList #-}
+{-# SPECIALIZE fromList
+        :: (Ord b, Trans t) => [(String, b)] -> DAWG t Char b #-}
+
+-- | Construct DAWG from the list of (word, value) pairs
+-- with a combining function.  The combining function is
+-- applied strictly.
+fromListWith
+    :: (Enum a, Ord b, Trans t) => (b -> b -> b)
+    -> [([a], b)] -> DAWG t a b
+fromListWith f xs =
+    let update t (x, v) = insertWith f x v t
+    in  foldl' update empty xs
+{-# SPECIALIZE fromListWith
+        :: (Ord b, Trans t) => (b -> b -> b)
+        -> [(String, b)] -> DAWG t Char b #-}
+
+-- | Make DAWG from the list of words.  Annotate each word with
+-- the @()@ value.
+fromLang :: (Enum a, Trans t) => [[a]] -> DAWG t a ()
+fromLang xs = fromList [(x, ()) | x <- xs]
+{-# SPECIALIZE fromLang :: Trans t => [String] -> DAWG t Char () #-}
