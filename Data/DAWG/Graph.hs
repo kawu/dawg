@@ -15,12 +15,9 @@ module Data.DAWG.Graph
 ) where
 
 import Control.Applicative ((<$>), (<*>))
--- import Data.List (foldl')
 import Data.Binary (Binary, put, get)
--- import qualified Data.Tree as T
 import qualified Data.IntSet as S
 import qualified Data.IntMap as M
--- import qualified Control.Monad.State.Strict as S
 
 import Data.DAWG.HashMap (Hash)
 import qualified Data.DAWG.HashMap as H
@@ -57,10 +54,10 @@ data Graph n = Graph {
 
 instance (Ord n, Binary n) => Binary (Graph n) where
     put Graph{..} = do
-    	put idMap
-	put freeIDs
-	put nodeMap
-	put ingoMap
+        put idMap
+        put freeIDs
+        put nodeMap
+        put ingoMap
     get = Graph <$> get <*> get <*> get <*> get
 
 -- | Empty graph.

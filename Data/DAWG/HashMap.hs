@@ -66,8 +66,8 @@ ejectUnsafe _ (Single _ _)  = Nothing    -- unsafe
 ejectUnsafe x (Multi m)     = (Just . trySingle) (M.delete x m)
 
 data HashMap a b = HashMap
-    { size      :: Int
-    , hashMap   :: I.IntMap (Value a b) }
+    { size      :: {-# UNPACK #-} !Int
+    , hashMap   :: !(I.IntMap (Value a b)) }
     deriving (Show, Eq, Ord)
 
 instance (Ord a, Binary a, Binary b) => Binary (HashMap a b) where
