@@ -50,14 +50,14 @@ data Node t a b
         -- | Transition map (outgoing edges).
         , transMap  :: !(H.Hashed t)
         -- | Labels corresponding to individual edges.
-        , labelVect :: !(U.Vector b) }
-    | Leaf { value  :: !(Maybe a) }
+        , labelVect :: !(U.Vector a) }
+    | Leaf { value  :: !(Maybe b) }
     deriving (Show)
 
-deriving instance (Eq a, Eq b, U.Unbox b)   => Eq (Node TV.Trans a b)
-deriving instance (Ord a, Ord b, U.Unbox b) => Ord (Node TV.Trans a b)
-deriving instance (Eq a, Eq b, U.Unbox b)   => Eq (Node TM.Trans a b)
-deriving instance (Ord a, Ord b, U.Unbox b) => Ord (Node TM.Trans a b)
+deriving instance (Eq a, Eq b, U.Unbox a)   => Eq (Node TV.Trans a b)
+deriving instance (Ord a, Ord b, U.Unbox a) => Ord (Node TV.Trans a b)
+deriving instance (Eq a, Eq b, U.Unbox a)   => Eq (Node TM.Trans a b)
+deriving instance (Ord a, Ord b, U.Unbox a) => Ord (Node TM.Trans a b)
 
 instance (Trans t, Ord (Node t a b)) => Hash (Node t a b) where
     hash Branch{..} = combine eps (H.hash transMap)
@@ -65,7 +65,7 @@ instance (Trans t, Ord (Node t a b)) => Hash (Node t a b) where
     	Just _	-> (-1)
 	Nothing	-> (-2)
 
-instance (U.Unbox b, Binary t, Binary a, Binary b) => Binary (Node t a b) where
+instance (U.Unbox a, Binary t, Binary a, Binary b) => Binary (Node t a b) where
     put Branch{..} = put (1 :: Int) >> put eps >> put transMap >> put labelVect
     put Leaf{..}   = put (2 :: Int) >> put value
     get = do
@@ -81,7 +81,7 @@ onSym _ (Leaf _)        = Nothing
 {-# INLINE onSym #-}
 
 -- | Transition function.
-onSym' :: (Trans t, U.Unbox b) => Sym -> Node t a b -> Maybe (ID, b)
+onSym' :: (Trans t, U.Unbox a) => Sym -> Node t a b -> Maybe (ID, a)
 onSym' x (Branch _ t ls)   = do
     k <- T.index x t
     (,) <$> (snd <$> T.byIndex k t)

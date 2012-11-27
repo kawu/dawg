@@ -1,10 +1,11 @@
 {-# LANGUAGE RecordWildCards #-}
 
+-- | A map from hashable keys to values.
+
 module Data.DAWG.HashMap
 ( Hash (..)
-, HashMap
+, HashMap (..)
 , empty
-, size
 , lookup
 , insertUnsafe
 , lookupUnsafe
@@ -22,9 +23,11 @@ fromJust (Just x)   = x
 fromJust Nothing    = error "fromJust: Nothing"
 {-# INLINE fromJust #-}
 
+-- | Class for types which provide hash values.
 class Ord a => Hash a where
     hash    :: a -> Int
 
+-- | Value in a HashMap.
 data Value a b
     = Single !a !b
     | Multi  !(M.Map a b)
@@ -39,16 +42,19 @@ instance (Ord a, Binary a, Binary b) => Binary (Value a b) where
             1   -> Single <$> get <*> get
             _   -> Multi <$> get
 
+-- | Find element associated to a value key.
 find :: Ord a => a -> Value a b -> Maybe b
 find x (Single x' y) = if x == x'
     then Just y
     else Nothing
 find x (Multi m) = M.lookup x m
 
+-- | Assumption: element is a member of the 'Value'. 
 findUnsafe :: Ord a => a -> Value a b -> Maybe b
-findUnsafe _ (Single _ y) = Just y
+findUnsafe _ (Single _ y) = Just y	-- unsafe
 findUnsafe x (Multi m) = M.lookup x m
 
+-- | Convert map into a 'Single' form if possible.
 trySingle :: Ord a => M.Map a b -> Value a b
 trySingle m = if M.size m == 1
     then (uncurry Single) (M.findMin m)
@@ -65,6 +71,9 @@ ejectUnsafe :: Ord a => a -> Value a b -> Maybe (Value a b)
 ejectUnsafe _ (Single _ _)  = Nothing    -- unsafe
 ejectUnsafe x (Multi m)     = (Just . trySingle) (M.delete x m)
 
+-- | A map from /a/ keys to /b/ elements where keys instantiate the
+-- 'Hash' type class.  Key/element pairs are kept in 'Value' objects
+-- which takes care of potential hash collisions.
 data HashMap a b = HashMap
     { size      :: {-# UNPACK #-} !Int
     , hashMap   :: !(I.IntMap (Value a b)) }

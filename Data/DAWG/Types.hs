@@ -8,5 +8,5 @@ module Data.DAWG.Types
 -- | Node identifier.
 type ID = Int
 
--- | Internal representation of the transition symbol.
+-- | Internal representation of an alphabet element.
 type Sym = Int

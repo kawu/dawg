@@ -1,6 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
--- | A vector representation of a transition map.
+-- | Implementation of a transition map build on top of the "M.Map" container.
 
 module Data.DAWG.Trans.Map
 ( Trans (unTrans)

@@ -16,6 +16,16 @@
 --     'hash' and 'unHash' functions,
 --
 --   * Doesn't provide insert/delete family of operations.
+--
+-- Transition backend has to be specified by a type signature.  You can import
+-- the desired transition type and define your own dictionary construction
+-- function.
+--
+-- > import Data.DAWG.Static
+-- > import Data.DAWG.Trans.Map (Trans)
+-- >
+-- > mkDict :: (Enum a, Ord b) => [([a], b)] -> DAWG Trans a Weight b
+-- > mkDict = weigh . fromList
 
 module Data.DAWG.Static
 (
@@ -67,20 +77,21 @@ import qualified Data.DAWG.Internal as D
 import qualified Data.DAWG.Util as Util
 
 -- | @DAWG t a b c@ constitutes an automaton with alphabet symbols of type /a/,
--- node values of type /Maybe b/ and additional transition labels of type /c/.
--- Root is stored on the first position of the array.
+-- transition labels of type /b/ and node values of type /Maybe c/, implemented
+-- on top of the 'T.Trans' /t/ backend.  All nodes are stored in a 'V.Vector'
+-- with positions of nodes corresponding to their 'ID's.
 newtype DAWG t a b c = DAWG { unDAWG :: V.Vector (Node t b c) }
     deriving (Show)
 
-deriving instance (Eq b, Eq c, Unbox c)     => Eq  (DAWG VT.Trans a b c)
-deriving instance (Ord b, Ord c, Unbox c)   => Ord (DAWG VT.Trans a b c)
+deriving instance (Eq b, Eq c, Unbox b)     => Eq  (DAWG VT.Trans a b c)
+deriving instance (Ord b, Ord c, Unbox b)   => Ord (DAWG VT.Trans a b c)
 
-instance (Binary t, Binary b, Binary c, Unbox c) => Binary (DAWG t a b c) where
+instance (Binary t, Binary b, Binary c, Unbox b) => Binary (DAWG t a b c) where
     put = put . unDAWG
     get = DAWG <$> get
 
 -- | Empty DAWG.
-empty :: (Trans t, Unbox c) => DAWG t a b c
+empty :: (Trans t, Unbox b) => DAWG t a b c
 empty = DAWG $ V.fromList
     [ N.Branch 1 T.empty U.empty
     , N.Leaf Nothing ]
@@ -94,32 +105,32 @@ nodeBy :: ID -> DAWG t a b c -> Node t b c
 nodeBy i d = unDAWG d V.! i
 
 -- | Value in leaf node with a given ID.
-leafValue :: Node t b c -> DAWG t a b c -> Maybe b
+leafValue :: Node t b c -> DAWG t a b c -> Maybe c
 leafValue n = N.value . nodeBy (N.eps n)
 
 -- | Find value associated with the key.
-lookup :: (Enum a, Trans t, Unbox c) => [a] -> DAWG t a b c -> Maybe b
+lookup :: (Enum a, Trans t, Unbox b) => [a] -> DAWG t a b c -> Maybe c
 lookup xs' =
     let xs = map fromEnum xs'
     in  lookup'I xs 0
 {-# SPECIALIZE lookup
-        :: (Trans t, Unbox c) => String
-        -> DAWG t Char b c -> Maybe b #-}
+        :: (Trans t, Unbox b) => String
+        -> DAWG t Char b c -> Maybe c #-}
 
-lookup'I :: (Trans t, Unbox c) => [Sym] -> ID -> DAWG t a b c -> Maybe b
+lookup'I :: (Trans t, Unbox b) => [Sym] -> ID -> DAWG t a b c -> Maybe c
 lookup'I []     i d = leafValue (nodeBy i d) d
 lookup'I (x:xs) i d = case N.onSym x (nodeBy i d) of
     Just j  -> lookup'I xs j d
     Nothing -> Nothing
 
 -- | Return all key/value pairs in the DAWG in ascending key order.
-assocs :: (Enum a, Trans t, Unbox c) => DAWG t a b c -> [([a], b)]
+assocs :: (Enum a, Trans t, Unbox b) => DAWG t a b c -> [([a], c)]
 assocs d = map (first (map toEnum)) (assocs'I 0 d)
 {-# SPECIALIZE assocs
-        :: (Trans t, Unbox c)
-        => DAWG t Char b c -> [(String, b)] #-}
+        :: (Trans t, Unbox b)
+        => DAWG t Char b c -> [(String, c)] #-}
 
-assocs'I :: (Trans t, Unbox c) => ID -> DAWG t a b c -> [([Sym], b)]
+assocs'I :: (Trans t, Unbox b) => ID -> DAWG t a b c -> [([Sym], c)]
 assocs'I i d =
     here ++ concatMap there (N.edges n)
   where
@@ -130,12 +141,12 @@ assocs'I i d =
     there (x, j) = map (first (x:)) (assocs'I j d)
 
 -- | Return all keys of the DAWG in ascending order.
-keys :: (Enum a, Trans t, Unbox c) => DAWG t a b c -> [[a]]
+keys :: (Enum a, Trans t, Unbox b) => DAWG t a b c -> [[a]]
 keys = map fst . assocs
-{-# SPECIALIZE keys :: (Trans t, Unbox c) => DAWG t Char b c -> [String] #-}
+{-# SPECIALIZE keys :: (Trans t, Unbox b) => DAWG t Char b c -> [String] #-}
 
 -- | Return all elements of the DAWG in the ascending order of their keys.
-elems :: (Trans t, Unbox c) => DAWG t a b c -> [b]
+elems :: (Trans t, Unbox b) => DAWG t a b c -> [c]
 elems = map snd . assocs'I 0
 
 -- | Construct 'DAWG' from the list of (word, value) pairs.
@@ -143,10 +154,10 @@ elems = map snd . assocs'I 0
 -- the 'freeze' function.
 fromList
     :: (Enum a, D.MkNode t b)
-    => [([a], b)] -> DAWG t a b ()
+    => [([a], b)] -> DAWG t a () b
 fromList = freeze . D.fromList
 {-# SPECIALIZE fromList
-        :: D.MkNode t b => [(String, b)] -> DAWG t Char b () #-}
+        :: D.MkNode t b => [(String, b)] -> DAWG t Char () b #-}
 
 -- | Construct DAWG from the list of (word, value) pairs
 -- with a combining function.  The combining function is
@@ -154,11 +165,11 @@ fromList = freeze . D.fromList
 -- it is frozen using the 'freeze' function.
 fromListWith
     :: (Enum a, D.MkNode t b)
-    => (b -> b -> b) -> [([a], b)] -> DAWG t a b ()
+    => (b -> b -> b) -> [([a], b)] -> DAWG t a () b
 fromListWith f = freeze . D.fromListWith f
 {-# SPECIALIZE fromListWith
         :: D.MkNode t b => (b -> b -> b)
-        -> [(String, b)] -> DAWG t Char b () #-}
+        -> [(String, b)] -> DAWG t Char () b #-}
 
 -- | Make DAWG from the list of words.  Annotate each word with
 -- the @()@ value.  First a 'D.DAWG' is created and then it is frozen
@@ -175,7 +186,7 @@ fromLang = freeze . D.fromLang
 type Weight = Int
 
 -- | Compute node weights and store corresponding values in transition labels.
-weigh :: Trans t => DAWG t a b c -> DAWG t a b Weight
+weigh :: Trans t => DAWG t a b c -> DAWG t a Weight c
 weigh d = (DAWG . V.fromList)
     [ branch n ws
     | i <- [0 .. numStates d - 1]
@@ -197,7 +208,7 @@ weigh d = (DAWG . V.fromList)
     allChildren n = N.eps n : N.children n
 
 -- | Construct immutable version of the automaton.
-freeze :: Trans t => D.DAWG t a b -> DAWG t a b ()
+freeze :: Trans t => D.DAWG t a b -> DAWG t a () b
 freeze d = DAWG . V.fromList $
     map (N.reID newID . oldBy)
         (M.elems (inverse old2new))
@@ -217,7 +228,7 @@ inverse =
     in  M.fromList . map swap . M.toList
 
 -- -- | Yield mutable version of the automaton.
--- thaw :: (Unbox c, Ord a) => DAWG a b c -> D.DAWG a b
+-- thaw :: (Unbox b, Ord a) => DAWG a b c -> D.DAWG a b
 -- thaw d =
 --     D.fromNodes nodes 0
 --   where
@@ -241,12 +252,12 @@ inverse =
 
 -- | Position in a set of all dictionary entries with respect
 -- to the lexicographic order.
-index :: (Enum a, Trans t) => [a] -> DAWG t a b Weight -> Maybe Int
+index :: (Enum a, Trans t) => [a] -> DAWG t a Weight c -> Maybe Int
 index xs = index'I (map fromEnum xs) 0
 {-# SPECIALIZE index
-        :: Trans t => String -> DAWG t Char b Weight -> Maybe Int #-}
+        :: Trans t => String -> DAWG t Char Weight c -> Maybe Int #-}
 
-index'I :: Trans t => [Sym] -> ID -> DAWG t a b Weight -> Maybe Int
+index'I :: Trans t => [Sym] -> ID -> DAWG t a Weight c -> Maybe Int
 index'I []     i d = 0 <$ leafValue (nodeBy i d) d
 index'I (x:xs) i d = do
     let n = nodeBy i d
@@ -257,18 +268,18 @@ index'I (x:xs) i d = do
 
 -- | Perfect hashing function for dictionary entries.
 -- A synonym for the 'index' function.
-hash :: (Enum a, Trans t) => [a] -> DAWG t a b Weight -> Maybe Int
+hash :: (Enum a, Trans t) => [a] -> DAWG t a Weight c -> Maybe Int
 hash = index
 {-# INLINE hash #-}
 
 -- | Find dictionary entry given its index with respect to the
 -- lexicographic order.
-byIndex :: (Enum a, Trans t) => Int -> DAWG t a b Weight -> Maybe [a]
+byIndex :: (Enum a, Trans t) => Int -> DAWG t a Weight c -> Maybe [a]
 byIndex ix d = map toEnum <$> byIndex'I ix 0 d
 {-# SPECIALIZE byIndex
-        :: Trans t => Int -> DAWG t Char b Weight -> Maybe String #-}
+        :: Trans t => Int -> DAWG t Char Weight c -> Maybe String #-}
 
-byIndex'I :: Trans t => Int -> ID -> DAWG t a b Weight -> Maybe [Sym]
+byIndex'I :: Trans t => Int -> ID -> DAWG t a Weight c -> Maybe [Sym]
 byIndex'I ix i d
     | ix < 0    = Nothing
     | otherwise = here <|> there
@@ -286,6 +297,6 @@ byIndex'I ix i d
     cmp w = compare w (ix - u)
 
 -- | Inverse of the 'hash' function and a synonym for the 'byIndex' function.
-unHash :: (Enum a, Trans t) => Int -> DAWG t a b Weight -> Maybe [a]
+unHash :: (Enum a, Trans t) => Int -> DAWG t a Weight c -> Maybe [a]
 unHash = byIndex
 {-# INLINE unHash #-}

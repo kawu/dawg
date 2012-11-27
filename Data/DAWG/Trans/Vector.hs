@@ -1,6 +1,9 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
--- | A vector representation of a transition map.
+-- | A vector representation of a transition map.  Memory efficient, but the
+-- insert operation is /O(n)/ with respect to the number of transitions.
+-- In particular, complexity of the insert operation can make the construction
+-- of a large-alphabet dictionary intractable.
 
 module Data.DAWG.Trans.Vector
 ( Trans (unTrans)

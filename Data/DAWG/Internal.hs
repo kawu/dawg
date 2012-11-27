@@ -47,7 +47,7 @@ import qualified Data.DAWG.Trans as T
 import qualified Data.DAWG.Node as N
 import qualified Data.DAWG.Graph as G
 
-type Node t a = N.Node t a ()
+type Node t a = N.Node t () a
 
 -- | Is /t/ a valid transition map within the context of
 -- /a/-valued automata nodes?  All transition implementations
