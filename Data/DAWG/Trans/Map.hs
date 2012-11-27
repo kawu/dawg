@@ -1,5 +1,4 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE RecordWildCards #-}
 
 -- | A vector representation of a transition map.
 
@@ -8,69 +7,28 @@ module Data.DAWG.Trans.Map
 ) where
 
 import Prelude hiding (lookup)
-import Control.Applicative ((<$>), (<*>))
-import Data.List (foldl')
-import Data.Monoid (Monoid, mappend)
-import Data.Binary (Binary, put, get)
+import Data.Binary (Binary)
 import qualified Data.Map as M
 
-import Data.DAWG.Util
 import Data.DAWG.Types
 import qualified Data.DAWG.Trans as C
 
 -- | A vector of distinct key/value pairs strictly ascending with respect
 -- to key values.
---
--- Hash of a transition map is a sum of element-wise hashes.
--- Hash for a given element @(Sym, ID) = combine Sym ID@.
-data Trans = Trans
-    { hashSum   :: Int
-    , unTrans   :: M.Map Sym ID }
-    deriving (Show)
-
-instance Binary Trans where
-    put Trans{..} = put hashSum >> put unTrans
-    get = Trans <$> get <*> get
-
-instance Eq Trans where
-    Trans i x == Trans j y
-        =  i == j
-        && M.size x == M.size y
-        && M.toAscList x == M.toAscList y
-
-instance Ord Trans where
-    Trans _ x `compare` Trans _ y
-        =  (M.size x `compare` M.size y)
-        <> (M.toAscList x `compare` M.toAscList y)
-
-(<>) :: Monoid m => m -> m -> m
-x <> y = mappend x y
-{-# INLINE (<>) #-}
+newtype Trans = Trans { unTrans :: M.Map Sym ID }
+    deriving (Show, Eq, Ord, Binary)
 
 instance C.Trans Trans where
-    empty = Trans 0 M.empty
+    empty = Trans M.empty
     {-# INLINE empty #-}
 
-    hash = hashSum
-    {-# INLINE hash #-}
-
-    lookup x (Trans _ m)    = M.lookup x m
+    lookup x = M.lookup x . unTrans
     {-# INLINE lookup #-}
 
-    insert x y (Trans h m)  = Trans
-        (h - h' + combine x y)
-        (M.insert x y m)
-      where
-        h' = case M.lookup x m of
-            Just y' -> combine x y'
-            Nothing -> 0
+    insert x y (Trans m) = Trans (M.insert x y m)
     {-# INLINE insert #-}
 
-    -- TODO: Reimplement.
-    fromList =
-        let f m (x, y) = C.insert x y m
-        in  foldl' f C.empty
-    -- fromList = Trans . M.fromList
+    fromList = Trans . M.fromList
     {-# INLINE fromList #-}
 
     toList = M.toList . unTrans

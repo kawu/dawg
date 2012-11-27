@@ -6,17 +6,16 @@ module Data.DAWG.HashMap
 , empty
 , size
 , lookup
-, unsafeInsert
-, unsafeLookup
-, unsafeDelete
+, insertUnsafe
+, lookupUnsafe
+, deleteUnsafe
 ) where
 
 import Prelude hiding (lookup)
 import Control.Applicative ((<$>), (<*>))
-import Data.Function (on)
-import Data.Binary (Binary, put, get)
-import qualified Data.List as L
+import Data.Binary (Binary, Get, put, get)
 import qualified Data.Map as M
+import qualified Data.IntMap as I
 
 fromJust :: Maybe a -> a
 fromJust (Just x)   = x
@@ -26,46 +25,77 @@ fromJust Nothing    = error "fromJust: Nothing"
 class Ord a => Hash a where
     hash    :: a -> Int
 
-data HashMap a b = HashMap
-    { size      :: Int
-    , hashMap   :: M.Map Int [(a, b)] }
+data Value a b
+    = Single !a !b
+    | Multi  !(M.Map a b)
     deriving (Show, Eq, Ord)
 
-instance (Binary a, Binary b) => Binary (HashMap a b) where
+instance (Ord a, Binary a, Binary b) => Binary (Value a b) where
+    put (Single x y)    = put (1 :: Int) >> put x >> put y
+    put (Multi m)       = put (2 :: Int) >> put m
+    get = do
+        x <- get :: Get Int
+        case x of
+            1   -> Single <$> get <*> get
+            _   -> Multi <$> get
+
+find :: Ord a => a -> Value a b -> Maybe b
+find x (Single x' y) = if x == x'
+    then Just y
+    else Nothing
+find x (Multi m) = M.lookup x m
+
+findUnsafe :: Ord a => a -> Value a b -> Maybe b
+findUnsafe _ (Single _ y) = Just y
+findUnsafe x (Multi m) = M.lookup x m
+
+trySingle :: Ord a => M.Map a b -> Value a b
+trySingle m = if M.size m == 1
+    then (uncurry Single) (M.findMin m)
+    else Multi m
+
+-- | Insert element into a value.
+embed :: Ord a => a -> b -> Value a b -> Value a b
+embed x y (Single x' y')    = Multi $ M.fromList [(x, y), (x', y')]
+embed x y (Multi m)         = Multi $ M.insert x y m
+
+-- | Delete element from a value.  Return 'Nothing' if the resultant
+-- value is empty.
+ejectUnsafe :: Ord a => a -> Value a b -> Maybe (Value a b)
+ejectUnsafe _ (Single _ _)  = Nothing    -- unsafe
+ejectUnsafe x (Multi m)     = (Just . trySingle) (M.delete x m)
+
+data HashMap a b = HashMap
+    { size      :: Int
+    , hashMap   :: I.IntMap (Value a b) }
+    deriving (Show, Eq, Ord)
+
+instance (Ord a, Binary a, Binary b) => Binary (HashMap a b) where
     put HashMap{..} = put size >> put hashMap
     get = HashMap <$> get <*> get
 
 -- | Empty map.
 empty :: HashMap a b
-empty = HashMap 0 M.empty
+empty = HashMap 0 I.empty
 
 -- | Lookup element in the map.
 lookup :: Hash a => a -> HashMap a b -> Maybe b
-lookup x (HashMap _ m) = do
-    xs <- M.lookup (hash x) m
-    snd <$> L.find ((==x) . fst) xs
+lookup x (HashMap _ m) = I.lookup (hash x) m >>= find x
 
--- | Insert the /new/ element.  The function doesn't check
+-- | Assumption: element is present in the map.
+lookupUnsafe :: Hash a => a -> HashMap a b -> b
+lookupUnsafe x (HashMap _ m) = fromJust (I.lookup (hash x) m >>= findUnsafe x)
+
+-- | Insert a new element.  The function doesn't check
 -- if the element was already present in the map.
-unsafeInsert :: Hash a => a -> b -> HashMap a b -> HashMap a b
-unsafeInsert x y (HashMap n m) =
+insertUnsafe :: Hash a => a -> b -> HashMap a b -> HashMap a b
+insertUnsafe x y (HashMap n m) =
     let i = hash x
-        f (Just xs) = (x, y) : xs
-        f Nothing   = [(x, y)]
-    in  HashMap (n + 1) $ M.alter (Just . f) i m
+        f (Just v)  = embed x y v
+        f Nothing   = Single x y
+    in  HashMap (n + 1) $ I.alter (Just . f) i m
 
 -- | Assumption: element is present in the map.
-unsafeLookup :: Hash a => a -> HashMap a b -> b
-unsafeLookup x (HashMap _ m) = fromJust $ do
-    r <- M.lookup (hash x) m
-    case r of
-        (y:_)   -> return (snd y)
-        ys      -> snd <$> L.find ((==x) . fst) ys
-
--- | Assumption: element is present in the map.
-unsafeDelete :: Hash a => a -> HashMap a b -> HashMap a b
-unsafeDelete x (HashMap n m) =
-    let i = hash x
-        f [_]   = Nothing
-        f ys    = Just $ L.deleteBy ((==) `on` fst) (x, undefined) ys
-    in  HashMap (n - 1) $ M.update f i m
+deleteUnsafe :: Hash a => a -> HashMap a b -> HashMap a b
+deleteUnsafe x (HashMap n m) =
+    HashMap (n - 1) $ I.update (ejectUnsafe x) (hash x) m

@@ -9,13 +9,11 @@ import Data.DAWG.Types
 
 -- | Abstraction over transition maps from alphabet symbols to
 -- node identifiers.
-class Ord t => Trans t where
+class Trans t where
     -- | Empty transition map.
     empty       :: t
     -- | Hash value.  Two transition maps equal with respect to
     -- the '==' function must have the same hash value.
-    hash        :: t -> Int
-    -- | Lookup the given symbol.
     lookup      :: Sym -> t -> Maybe ID
     -- | Find index of the symbol.
     index       :: Sym -> t -> Maybe Int

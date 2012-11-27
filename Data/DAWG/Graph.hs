@@ -78,8 +78,8 @@ nodeBy i g = nodeMap g M.! i
 -- | Retrieve identifier of a node assuming that the node
 -- is present in the graph.  If the assumption is not
 -- safisfied, the returned identifier may be incorrect.
-unsafeNodeID :: Hash n => n -> Graph n -> ID
-unsafeNodeID n g = H.unsafeLookup n (idMap g)
+nodeID'Unsafe :: Hash n => n -> Graph n -> ID
+nodeID'Unsafe n g = H.lookupUnsafe n (idMap g)
 
 -- | Add new graph node (assuming that it is not already a member
 -- of the graph).
@@ -87,7 +87,7 @@ newNode :: Hash n => n -> Graph n -> (ID, Graph n)
 newNode n Graph{..} =
     (i, Graph idMap' freeIDs' nodeMap' ingoMap')
   where
-    idMap'      = H.unsafeInsert n i idMap
+    idMap'      = H.insertUnsafe n i idMap
     nodeMap'    = M.insert i n nodeMap
     ingoMap'    = M.insert i 1 ingoMap
     (i, freeIDs') = if S.null freeIDs
@@ -100,7 +100,7 @@ remNode :: Hash n => ID -> Graph n -> Graph n
 remNode i Graph{..} =
     Graph idMap' freeIDs' nodeMap' ingoMap'
   where
-    idMap'      = H.unsafeDelete n idMap
+    idMap'      = H.deleteUnsafe n idMap
     nodeMap'    = M.delete i nodeMap
     ingoMap'    = M.delete i ingoMap
     freeIDs'    = S.insert i freeIDs
@@ -138,7 +138,7 @@ delete n g = if num == 0
     then remNode i g'
     else g'
   where
-    i = unsafeNodeID n g
+    i = nodeID'Unsafe n g
     (num, g') = decIngo i g
 
 -- -- | Construct a graph from a list of node/ID pairs and a root ID.

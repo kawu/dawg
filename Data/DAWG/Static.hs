@@ -58,14 +58,13 @@ import qualified Data.Vector.Unboxed as U
 
 import Data.DAWG.Types
 import Data.DAWG.Trans (Trans)
+import Data.DAWG.Node (Node)
 import qualified Data.DAWG.Trans as T
 import qualified Data.DAWG.Trans.Vector as VT
 import qualified Data.DAWG.Node as N
 import qualified Data.DAWG.Graph as G
 import qualified Data.DAWG.Internal as D
 import qualified Data.DAWG.Util as Util
-
-type Node t a b = N.Node t (Maybe a) b
 
 -- | @DAWG t a b c@ constitutes an automaton with alphabet symbols of type /a/,
 -- node values of type /Maybe b/ and additional transition labels of type /c/.

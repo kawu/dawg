@@ -32,11 +32,11 @@ library
     exposed-modules:
         Data.DAWG
       , Data.DAWG.Types
-      -- , Data.DAWG.Static
+      , Data.DAWG.Static
       , Data.DAWG.Trans
-      -- , Data.DAWG.Trans.Vector
+      , Data.DAWG.Trans.Vector
       , Data.DAWG.Trans.Map
-      -- , Data.DAWG.Trans.IntMap
+      , Data.DAWG.Trans.Hashed
 
     other-modules:
         Data.DAWG.Node
