@@ -31,7 +31,7 @@ instance C.Trans Trans where
     byIndex i (Trans m) =
 	let n = M.size m
         in  if i >= 0 && i < n
-                then Just (M.elemAt i)
+                then Just (M.elemAt i m)
                 else Nothing
     {-# INLINE byIndex #-}
 
