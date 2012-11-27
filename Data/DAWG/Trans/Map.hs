@@ -25,6 +25,16 @@ instance C.Trans Trans where
     lookup x = M.lookup x . unTrans
     {-# INLINE lookup #-}
 
+    index x = M.lookupIndex x . unTrans
+    {-# INLINE index #-}
+
+    byIndex i (Trans m) =
+	let n = M.size m
+        in  if i >= 0 && i < n
+                then Just (M.elemAt i)
+                else Nothing
+    {-# INLINE byIndex #-}
+
     insert x y (Trans m) = Trans (M.insert x y m)
     {-# INLINE insert #-}
 
@@ -33,6 +43,3 @@ instance C.Trans Trans where
 
     toList = M.toList . unTrans
     {-# INLINE toList #-}
-
-    index   _ _ = error "Trans.Map doesn't provide the 'index' operation"
-    byIndex _ _ = error "Trans.Map doesn't provide the 'byIndex' operation"

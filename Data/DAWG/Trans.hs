@@ -12,8 +12,7 @@ import Data.DAWG.Types
 class Trans t where
     -- | Empty transition map.
     empty       :: t
-    -- | Hash value.  Two transition maps equal with respect to
-    -- the '==' function must have the same hash value.
+    -- | Lookup sybol in the map.
     lookup      :: Sym -> t -> Maybe ID
     -- | Find index of the symbol.
     index       :: Sym -> t -> Maybe Int

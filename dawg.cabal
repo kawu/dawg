@@ -36,7 +36,6 @@ library
       , Data.DAWG.Trans
       , Data.DAWG.Trans.Vector
       , Data.DAWG.Trans.Map
-      , Data.DAWG.Trans.Hashed
 
     other-modules:
         Data.DAWG.Node
@@ -44,6 +43,7 @@ library
       , Data.DAWG.Internal
       , Data.DAWG.Util
       , Data.DAWG.HashMap
+      , Data.DAWG.Trans.Hashed
 
     ghc-options: -Wall -O2 -auto
 
