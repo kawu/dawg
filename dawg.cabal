@@ -25,7 +25,7 @@ build-type:         Simple
 library
     build-depends:
         base >= 4 && < 5
-      , containers
+      , containers >= 0.4.1 && < 0.6
       , binary
       , vector
       , vector-binary
