@@ -1,5 +1,5 @@
 name:               dawg
-version:            0.8
+version:            0.8.1
 synopsis:           Directed acyclic word graphs
 description:
     The library implements /directed acyclic word graphs/ (DAWGs) internaly
