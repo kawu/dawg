@@ -47,7 +47,7 @@ library
       , Data.DAWG.HashMap
       , Data.DAWG.Trans.Hashed
 
-    ghc-options: -Wall -O2 -auto
+    ghc-options: -Wall -O2
 
 source-repository head
     type: git
