@@ -19,6 +19,7 @@ module Data.DAWG.Static
 -- * Query
 , lookup
 , numStates
+, numEdges
 -- * Index
 , index
 , byIndex
@@ -79,6 +80,10 @@ empty = DAWG $ V.fromList
 -- | Number of states in the automaton.
 numStates :: DAWG a b c -> Int
 numStates = V.length . unDAWG
+
+-- | Number of edges in the automaton.
+numEdges :: DAWG a b c -> Int
+numEdges = sum . map (length . N.edges) . V.toList . unDAWG
 
 -- | Node with the given identifier.
 nodeBy :: ID -> DAWG a b c -> N.Node b c

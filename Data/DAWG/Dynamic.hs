@@ -9,6 +9,7 @@ module Data.DAWG.Dynamic
   DAWG
 -- * Query
 , numStates
+, numEdges
 , lookup
 -- * Construction
 , empty
@@ -149,6 +150,10 @@ empty =
 -- | Number of states in the underlying graph.
 numStates :: DAWG a b -> Int
 numStates = G.size . graph
+
+-- | Number of states in the underlying graph.
+numEdges :: DAWG a b -> Int
+numEdges = sum . map (length . N.edges) . G.nodes . graph
 
 -- | Insert the (key, value) pair into the DAWG.
 insert :: (Enum a, Ord b) => [a] -> b -> DAWG a b -> DAWG a b

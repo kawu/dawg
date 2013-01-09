@@ -78,10 +78,3 @@ insert :: Sym -> ID -> Node a -> Node a
 insert x i (Branch w t) = Branch w (T.insert x i t)
 insert _ _ l            = l
 {-# INLINE insert #-}
-
--- -- | Assign new identifiers.
--- reID :: Trans t => (ID -> ID) -> Node t a b -> Node t a b
--- reID _ (Leaf x)         = Leaf x
--- reID f (Branch e t ls)  =
---     let reTrans = T.fromList . map (second f) . T.toList
---     in  Branch (f e) (reTrans t) ls

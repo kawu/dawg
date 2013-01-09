@@ -9,6 +9,7 @@ module Data.DAWG.Graph
 ( Graph (..)
 , empty
 , size
+, nodes
 , nodeBy
 , insert
 , delete
@@ -67,6 +68,10 @@ empty = Graph H.empty S.empty M.empty M.empty
 -- | Size of the graph (number of nodes).
 size :: Graph n -> Int
 size = H.size . idMap
+
+-- | List of graph nodes.
+nodes :: Graph n -> [n]
+nodes = M.elems . nodeMap
 
 -- | Node with the given identifier.
 nodeBy :: ID -> Graph n -> n
