@@ -147,11 +147,11 @@ empty =
     let (i, g) = S.runState insertLeaf G.empty
     in  DAWG g i
 
--- | Number of states in the underlying graph.
+-- | Number of states in the automaton.
 numStates :: DAWG a b -> Int
 numStates = G.size . graph
 
--- | Number of states in the underlying graph.
+-- | Number of edges in the automaton.
 numEdges :: DAWG a b -> Int
 numEdges = sum . map (length . N.edges) . G.nodes . graph
 
