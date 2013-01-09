@@ -1,5 +1,5 @@
 name:               dawg
-version:            0.8.1
+version:            0.9
 synopsis:           Directed acyclic word graphs
 description:
     The library implements /directed acyclic word graphs/ (DAWGs) internaly
@@ -32,20 +32,23 @@ library
       , mtl
 
     exposed-modules:
-        Data.DAWG
-      , Data.DAWG.Types
-      , Data.DAWG.Static
-      , Data.DAWG.Trans
+        Data.DAWG.Trans
       , Data.DAWG.Trans.Vector
       , Data.DAWG.Trans.Map
+--         Data.DAWG
+--       , Data.DAWG.Types
 
     other-modules:
-        Data.DAWG.Node
-      , Data.DAWG.Graph
-      , Data.DAWG.Internal
-      , Data.DAWG.Util
-      , Data.DAWG.HashMap
-      , Data.DAWG.Trans.Hashed
+        Data.DAWG.Dynamic
+      , Data.DAWG.Dynamic.Node
+      , Data.DAWG.Static
+      , Data.DAWG.Static.Node
+--         Data.DAWG.Node
+--       , Data.DAWG.Graph
+--       , Data.DAWG.Internal
+--       , Data.DAWG.Util
+--       , Data.DAWG.HashMap
+--       , Data.DAWG.Trans.Hashed
 
     ghc-options: -Wall -O2
 
