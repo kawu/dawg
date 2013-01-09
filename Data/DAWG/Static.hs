@@ -3,24 +3,14 @@
 -- | The module implements /directed acyclic word graphs/ (DAWGs) internaly
 -- represented as /minimal acyclic deterministic finite-state automata/.
 --
--- In comparison to "Data.DAWG" module the automaton implemented here:
+-- In comparison to "Data.DAWG.Dynamic" module the automaton implemented here:
 --
---   * Keeps all nodes in one array and therefore uses much less memory,
+--   * Keeps all nodes in one array and therefore uses less memory,
 --
 --   * When 'weigh'ed, it can be used to perform static hashing with
 --     'hash' and 'unHash' functions,
 --
 --   * Doesn't provide insert/delete family of operations.
---
--- Transition backend has to be specified by a type signature.  You can import
--- the desired transition type and define your own dictionary construction
--- function.
---
--- > import Data.DAWG.Static
--- > import Data.DAWG.Trans.Map (Trans)
--- >
--- > mkDict :: (Enum a, Ord b) => [([a], b)] -> DAWG Trans a Weight b
--- > mkDict = weigh . fromList
 
 module Data.DAWG.Static
 (
@@ -64,9 +54,10 @@ import qualified Data.Vector.Unboxed as U
 import Data.DAWG.Types
 import qualified Data.DAWG.Util as Util
 import qualified Data.DAWG.Trans as T
+import qualified Data.DAWG.Static.Node as N
 import qualified Data.DAWG.Graph as G
 import qualified Data.DAWG.Dynamic as D
-import qualified Data.DAWG.Static.Node as N
+import qualified Data.DAWG.Dynamic.Internal as D
 
 -- | @DAWG a b c@ constitutes an automaton with alphabet symbols of type /a/,
 -- transition labels of type /b/ and node values of type /Maybe c/.

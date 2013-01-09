@@ -6,7 +6,7 @@
 module Data.DAWG.Dynamic
 (
 -- * DAWG type
-  DAWG (..)
+  DAWG
 -- * Query
 , numStates
 , lookup
@@ -30,11 +30,11 @@ import Prelude hiding (lookup)
 import Control.Applicative ((<$>), (<*>))
 import Control.Arrow (first)
 import Data.List (foldl')
-import Data.Binary (Binary, put, get)
 import qualified Control.Monad.State.Strict as S
 
 import Data.DAWG.Types
 import Data.DAWG.Graph (Graph)
+import Data.DAWG.Dynamic.Internal
 import qualified Data.DAWG.Trans as T
 import qualified Data.DAWG.Graph as G
 import qualified Data.DAWG.Dynamic.Node as N
@@ -139,19 +139,6 @@ assocsAcc g i =
         Just x  -> [([], x)]
         Nothing -> []
     there (sym, j) = map (first (sym:)) (assocsAcc g j)
-
--- | A directed acyclic word graph with phantom type @a@ representing
--- type of alphabet elements.
-data DAWG a b = DAWG
-    { graph :: !(Graph (N.Node b))
-    , root  :: !ID }
-    deriving (Show, Eq, Ord)
-
-instance (Ord b, Binary b) => Binary (DAWG a b) where
-    put d = do
-        put (graph d)
-        put (root d)
-    get = DAWG <$> get <*> get
 
 -- | Empty DAWG.
 empty :: Ord b => DAWG a b
