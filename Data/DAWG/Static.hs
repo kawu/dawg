@@ -45,6 +45,7 @@ module Data.DAWG.Static
 import Prelude hiding (lookup)
 import Control.Applicative ((<$), (<$>), (<|>))
 import Control.Arrow (first)
+import Control.Monad.ST
 import Data.Binary (Binary, put, get)
 import Data.Vector.Binary ()
 import Data.Vector.Unboxed (Unbox)
@@ -134,7 +135,7 @@ elems = map snd . assocs'I 0
 -- First a 'D.DAWG' is created and then it is frozen using
 -- the 'freeze' function.
 fromList :: (Enum a, Ord b) => [([a], b)] -> DAWG a () b
-fromList = freeze . D.fromList
+fromList xs = runST $ freeze <$> D.fromList xs
 {-# SPECIALIZE fromList :: Ord b => [(String, b)] -> DAWG Char () b #-}
 
 -- | Construct DAWG from the list of (word, value) pairs
@@ -142,7 +143,7 @@ fromList = freeze . D.fromList
 -- applied strictly. First a 'D.DAWG' is created and then
 -- it is frozen using the 'freeze' function.
 fromListWith :: (Enum a, Ord b) => (b -> b -> b) -> [([a], b)] -> DAWG a () b
-fromListWith f = freeze . D.fromListWith f
+fromListWith f xs = runST $ freeze <$> D.fromListWith f xs
 {-# SPECIALIZE fromListWith
         :: Ord b => (b -> b -> b)
         -> [(String, b)] -> DAWG Char () b #-}
@@ -151,7 +152,7 @@ fromListWith f = freeze . D.fromListWith f
 -- the @()@ value.  First a 'D.DAWG' is created and then it is frozen
 -- using the 'freeze' function.
 fromLang :: Enum a => [[a]] -> DAWG a () ()
-fromLang = freeze . D.fromLang
+fromLang xs = runST $ freeze <$> D.fromLang xs
 {-# SPECIALIZE fromLang :: [String] -> DAWG Char () () #-}
 
 -- | Weight of a node corresponds to the number of final states
@@ -182,7 +183,7 @@ weigh d = (DAWG . V.fromList)
     allChildren n = N.eps n : N.children n
 
 -- | Construct immutable version of the automaton.
-freeze :: D.DAWG a b -> DAWG a () b
+freeze :: D.DAWG s a b -> DAWG a () b
 freeze d = DAWG . V.fromList $
     map (N.fromDyn newID . oldBy)
         (M.elems (inverse old2new))

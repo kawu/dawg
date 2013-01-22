@@ -6,7 +6,7 @@
 module Data.DAWG.Util
 ( binarySearch
 , findLastLE
-, combine
+-- , combine
 ) where
 
 import Control.Applicative ((<$>))
@@ -51,8 +51,8 @@ findLastLE cmp v =
     in  (k,) <$> v U.!? k
 {-# INLINE findLastLE #-}
 
--- | Combine two given hash values.  'combine' has zero as a left
--- identity.
-combine :: Int -> Int -> Int
-combine h1 h2 = (h1 * 16777619) `xor` h2
-{-# INLINE combine #-}
+-- -- | Combine two given hash values.  'combine' has zero as a left
+-- -- identity.
+-- combine :: Int -> Int -> Int
+-- combine h1 h2 = (h1 * 16777619) `xor` h2
+-- {-# INLINE combine #-}

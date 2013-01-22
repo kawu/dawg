@@ -10,7 +10,7 @@ module Data.DAWG.Trans.Hashed
 
 import Prelude hiding (lookup)
 import Control.Applicative ((<$>), (<*>))
-import Data.DAWG.Util (combine)
+import Data.Hashable (combine)
 import Data.Binary (Binary, put, get)
 import Data.DAWG.Trans
 import qualified Data.DAWG.Trans.Map as M
