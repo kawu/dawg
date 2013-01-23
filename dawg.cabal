@@ -48,6 +48,9 @@ library
       , Data.DAWG.Dynamic.Node
       , Data.DAWG.Util
 
+      , Data.DAWG.HashTable.Hash
+      , Data.DAWG.HashTable.Bucket
+
     ghc-options: -Wall -O2 -fprof-auto
 
 source-repository head
