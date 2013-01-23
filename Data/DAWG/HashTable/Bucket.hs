@@ -18,12 +18,15 @@ module Data.DAWG.HashTable.Bucket
 
 import Prelude hiding (lookup)
 import Control.Applicative ((<$), (<$>), (<*>))
+import Control.Monad (forM_)
 import Control.Monad.ST
 import qualified Data.Vector.Mutable as V
 import qualified Data.Vector.Unboxed.Mutable as U
 
 import Data.DAWG.HashTable.Hash (Hash)
 import qualified Data.DAWG.HashTable.Hash as H
+
+import Debug.Trace (trace)
 
 -- | Bucket of entries with the same hash value module size of the hash table.
 data Bucket s a b = Bucket {
@@ -90,7 +93,7 @@ searchMember k (Bucket hs ks _) = consume =<< go [] 0
     consume [i]     = return (Just i)
     consume (i:is)  = do
         k' <- V.read ks i
-        if k == k'
+        if (k == k')  -- < to porownanie pada!
             then return (Just i)
             else consume is
     consume []      = return Nothing
@@ -100,13 +103,16 @@ assocs :: Bucket s a b -> ST s [(a, b)]
 assocs Bucket{..} = go [] 0
   where
     n = U.length hashes
-    go acc !i =
-        if i < n
-            then do
-                k <- V.read keys i
-                v <- V.read values i
-                go ((k, v):acc) (i+1)
-            else return acc
+    go acc !i
+        | i < n = do
+            h <- U.read hashes i
+            if h /= empty
+                then do
+                    k <- V.read keys i
+                    v <- V.read values i
+                    go ((k, v):acc) (i+1)
+                else go acc (i+1)
+        | otherwise = return acc
 
 -- | Search empty place in the bucket. 
 searchEmpty :: Bucket s b a -> ST s (Maybe Int)
@@ -122,10 +128,15 @@ searchEmpty (Bucket hs _ _) = go 0
         | otherwise = return Nothing
 
 -- | Double size of the bucket.
+-- TODO: does it work, when intitial bucket size is 0?
 grow :: Bucket s a b -> ST s (Bucket s a b)
 grow (Bucket hs ks vs) = do
     let n = U.length hs
-    hs' <- U.grow hs n
+    hs' <- if n < 8
+        then U.grow hs n
+        else trace ("bucket: " ++ show n) $ U.grow hs n
+    forM_ [n .. 2*n-1] $ \i -> do
+        U.write hs' i empty
     ks' <- V.grow ks n
     vs' <- V.grow vs n
     return $ Bucket hs' ks' vs'
@@ -168,12 +179,12 @@ lookup k b = do
         Just ix -> Just <$> V.read (values b) ix
 
 -- | Lookup key which is known to be a member of the bucket.
-lookupMember :: Hash a => a -> Bucket s a b -> ST s (Maybe b)
+lookupMember :: Hash a => a -> Bucket s a b -> ST s b
 lookupMember k b = do
     mix <- searchMember k b
     case mix of
-        Nothing -> return Nothing
-        Just ix -> Just <$> V.read (values b) ix
+        Just ix -> V.read (values b) ix
+        Nothing -> error "lookupMember: not a member"
 
 -- | Remove key from the bucket together with accompanying value.
 delete :: Hash a => a -> Bucket s a b -> ST s (Bucket s a b)

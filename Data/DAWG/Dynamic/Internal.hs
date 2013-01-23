@@ -18,7 +18,6 @@ import qualified Data.DAWG.Dynamic.Node as N
 data DAWG s a b = DAWG
     { graph :: !(Graph s (N.Node b))
     , root  :: !ID }
-    deriving (Show)
 
 -- instance (Ord b, Binary b) => Binary (DAWG a b) where
 --     put d = do

@@ -19,6 +19,8 @@ import qualified Data.Vector.Mutable as V
 import Data.DAWG.HashTable.Hash
 import qualified Data.DAWG.HashTable.Bucket as B
 
+import Debug.Trace (trace)
+
 data HashTable s a b = HashTable {
     -- | Number of elements in the table.
       elemNum           :: !Int
@@ -52,13 +54,14 @@ lookup k HashTable{..} = do
     B.lookup k bucket
 
 -- | Lookup key which is known to be a member of the table.
-lookupMember :: Hash a => a -> HashTable s a b -> ST s (Maybe b)
+lookupMember :: Hash a => a -> HashTable s a b -> ST s b
 lookupMember k HashTable{..} = do
     let ix = hash k `mod` V.length body
     bucket <- V.read body ix
     B.lookupMember k bucket
 
--- | Lookup key in the table.
+-- | Insert new element into the table.  It is assumed, that the key
+-- is new; otherwise, the function may work incorrectly.
 insertNew :: Hash a => a -> b -> HashTable s a b -> ST s (HashTable s a b)
 insertNew k v tab0 = do
     tab@HashTable{..} <- checkGrow tab0
@@ -66,7 +69,7 @@ insertNew k v tab0 = do
     bucket  <- V.read body ix
     bucket' <- B.insertNew k v bucket
     V.write body ix bucket'
-    return tab
+    return $ tab { elemNum = elemNum + 1 }
 
 -- | Remove member key from the table.
 deleteMember :: Hash a => a -> HashTable s a b -> ST s (HashTable s a b)
@@ -75,7 +78,7 @@ deleteMember k tab@HashTable{..} = do
     bucket  <- V.read body ix
     bucket' <- B.deleteMember k bucket
     V.write body ix bucket'
-    return tab
+    return $ tab { elemNum = elemNum - 1 }
 
 -- | Grow the table if appropriate conditions are satisfied.
 checkGrow :: Hash a => HashTable s a b -> ST s (HashTable s a b)
@@ -86,17 +89,22 @@ checkGrow tab@HashTable{..}
     x ./. y = fromIntegral x / fromIntegral y
 
 -- | Grow the table.
+-- TODO: does it work properly when the table is empty?
 grow :: Hash a => HashTable s a b -> ST s (HashTable s a b)
 grow tab0 = do
     let body0 = body tab0
         n0 = V.length body0
-    tab1 <- new
+    tab1 <- trace ("grow table from size: " ++ show n0) $ new
         (n0 * 2)
         (bucketInitSize tab0)
         (sizeRatio tab0)
+    -- TODO: This is tricky and should be changed; number of elements is
+    -- incremented in the insertNew function, but we ignore it.
+    -- Only when we exit from the grow function, the correct elenNum value
+    -- is assigned.
     forM_ [0 .. n0-1] $ \i -> do
         bucket <- V.read body0 i
         assocs <- B.assocs bucket
         forM_ assocs $ \(k, v) -> do
             insertNew k v tab1
-    return tab1
+    trace "done" $ return $ tab1 { elemNum = elemNum tab0 }

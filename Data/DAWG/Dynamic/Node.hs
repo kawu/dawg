@@ -14,8 +14,9 @@ import Control.Applicative ((<$>), (<*>))
 import Data.Binary (Binary, Get, put, get)
 
 import Data.DAWG.Types
-import Data.Hashable 
+import Data.DAWG.Util (combine)
 import Data.DAWG.Trans.Map (Trans)
+import Data.DAWG.HashTable.Hash 
 import qualified Data.DAWG.Trans as T
 import qualified Data.DAWG.Trans.Hashed as H
 
@@ -40,7 +41,7 @@ data Node a
     | Leaf { value  :: !(Maybe a) }
     deriving (Show, Eq, Ord)
 
-instance Ord a => Hashable (Node a) where
+instance Ord a => Hash (Node a) where
     hash Branch{..} = combine eps (H.hash transMap)
     -- TODO: Will not work properly with the same hash for all
     -- Just values!
