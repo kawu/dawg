@@ -7,6 +7,7 @@ module Data.DAWG.HashTable.Bucket
 ( Bucket
 , new
 , size
+, assocs
 , lookup
 , lookupMember
 , insert
@@ -32,10 +33,10 @@ data Bucket s a b = Bucket {
 
 -- | New bucket of given size.
 new :: Int -> ST s (Bucket s a b)
-new k = Bucket
-    <$> U.new k
-    <*> V.new k
-    <*> V.new k
+new k = do
+    hs <- U.new k
+    U.set hs empty 
+    Bucket hs <$> V.new k <*> V.new k
 
 -- | Size of the bucket (it doesn't have to be equal to the
 -- number of elements, though).
@@ -94,6 +95,18 @@ searchMember k (Bucket hs ks _) = consume =<< go [] 0
             else consume is
     consume []      = return Nothing
         
+-- | List of key/elem pairs in the bucket.
+assocs :: Bucket s a b -> ST s [(a, b)]
+assocs Bucket{..} = go [] 0
+  where
+    n = U.length hashes
+    go acc !i =
+        if i < n
+            then do
+                k <- V.read keys i
+                v <- V.read values i
+                go ((k, v):acc) (i+1)
+            else return acc
 
 -- | Search empty place in the bucket. 
 searchEmpty :: Bucket s b a -> ST s (Maybe Int)
@@ -107,7 +120,7 @@ searchEmpty (Bucket hs _ _) = go 0
                 then return (Just k)
                 else go (k+1)
         | otherwise = return Nothing
-    
+
 -- | Double size of the bucket.
 grow :: Bucket s a b -> ST s (Bucket s a b)
 grow (Bucket hs ks vs) = do

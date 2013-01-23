@@ -48,6 +48,7 @@ library
       , Data.DAWG.Dynamic.Node
       , Data.DAWG.Util
 
+      , Data.DAWG.HashTable
       , Data.DAWG.HashTable.Hash
       , Data.DAWG.HashTable.Bucket
 
