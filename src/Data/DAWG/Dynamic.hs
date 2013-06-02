@@ -1,3 +1,6 @@
+{-# LANGUAGE RecordWildCards #-}
+
+
 -- | The module implements /directed acyclic word graphs/ (DAWGs) internaly
 -- represented as /minimal acyclic deterministic finite-state automata/.
 -- The implementation provides fast insert and delete operations
@@ -8,9 +11,10 @@ module Data.DAWG.Dynamic
 -- * DAWG type
   DAWG
 -- * Query
+, lookup
+, withPrefix
 , numStates
 , numEdges
-, lookup
 -- * Construction
 , empty
 , fromList
@@ -32,6 +36,8 @@ import Control.Applicative ((<$>), (<*>))
 import Control.Arrow (first)
 import Data.List (foldl')
 import qualified Control.Monad.State.Strict as S
+import           Control.Monad.Trans.Maybe
+import           Control.Monad.Trans.Class
 
 import Data.DAWG.Types
 import Data.DAWG.Graph (Graph)
@@ -40,7 +46,7 @@ import qualified Data.DAWG.Trans as T
 import qualified Data.DAWG.Graph as G
 import qualified Data.DAWG.Dynamic.Node as N
 
-type GraphM a b = S.State (Graph (N.Node a)) b
+type GraphM a = S.State (Graph (N.Node a))
 
 mkState :: (Graph a -> Graph a) -> Graph a -> ((), Graph a)
 mkState f g = ((), f g)
@@ -119,19 +125,25 @@ deleteM [] i = do
     deleteNode n
     j <- insertLeaf
     insertNode (n { N.eps = j })
+
+-- | Follow the path from the given identifier.
+follow :: [Sym] -> ID -> MaybeT (GraphM a) ID
+follow (x:xs) i = do
+    n <- lift $ nodeBy i
+    j <- liftMaybe $ N.onSym x n
+    follow xs j
+follow [] i = return i
     
 lookupM :: [Sym] -> ID -> GraphM a (Maybe a)
-lookupM [] i = do
-    j <- N.eps <$> nodeBy i
-    N.value <$> nodeBy j
-lookupM (x:xs) i = do
-    n <- nodeBy i
-    case N.onSym x n of
-        Just j  -> lookupM xs j
-        Nothing -> return Nothing
+lookupM xs i = runMaybeT $ do
+    j <- follow xs i
+    k <- lift $ N.eps <$> nodeBy j
+    MaybeT $ N.value <$> nodeBy k
 
-assocsAcc :: Graph (N.Node a) -> ID -> [([Sym], a)]
-assocsAcc g i =
+-- | Return all (key, value) pairs in ascending key order in the
+-- sub-DAWG determined by the given node ID.
+subPairs :: Graph (N.Node a) -> ID -> [([Sym], a)]
+subPairs g i =
     here w ++ concatMap there (N.edges n)
   where
     n = G.nodeBy i g
@@ -139,7 +151,7 @@ assocsAcc g i =
     here v = case N.value v of
         Just x  -> [([], x)]
         Nothing -> []
-    there (sym, j) = map (first (sym:)) (assocsAcc g j)
+    there (sym, j) = map (first (sym:)) (subPairs g j)
 
 -- | Empty DAWG.
 empty :: Ord b => DAWG a b
@@ -162,7 +174,6 @@ insert xs' y d =
         (i, g) = S.runState (insertM xs y $ root d) (graph d)
     in  DAWG g i
 {-# INLINE insert #-}
-{-# SPECIALIZE insert :: Ord b => String -> b -> DAWG Char b -> DAWG Char b #-}
 
 -- | Insert with a function, combining new value and old value.
 -- 'insertWith' f key value d will insert the pair (key, value) into d if
@@ -194,11 +205,23 @@ lookup xs' d =
     in  S.evalState (lookupM xs $ root d) (graph d)
 {-# SPECIALIZE lookup :: Ord b => String -> DAWG Char b -> Maybe b #-}
 
+-- | Find all (key, value) pairs such that key is prefixed
+-- with the given string.
+withPrefix :: (Enum a, Ord b) => [a] -> DAWG a b -> [([a], b)]
+withPrefix xs DAWG{..}
+    = map (first $ (xs ++) . map toEnum)
+    $ maybe [] (subPairs graph)
+    $ flip S.evalState graph $ runMaybeT
+    $ follow (map fromEnum xs) root
+{-# SPECIALIZE withPrefix
+    :: Ord b => String -> DAWG Char b
+    -> [(String, b)] #-}
+
 -- | Return all key/value pairs in the DAWG in ascending key order.
 assocs :: (Enum a, Ord b) => DAWG a b -> [([a], b)]
 assocs
     = map (first (map toEnum))
-    . (assocsAcc <$> graph <*> root)
+    . (subPairs <$> graph <*> root)
 {-# SPECIALIZE assocs :: Ord b => DAWG Char b -> [(String, b)] #-}
 
 -- | Return all keys of the DAWG in ascending order.
@@ -208,7 +231,7 @@ keys = map fst . assocs
 
 -- | Return all elements of the DAWG in the ascending order of their keys.
 elems :: Ord b => DAWG a b -> [b]
-elems = map snd . (assocsAcc <$> graph <*> root)
+elems = map snd . (subPairs <$> graph <*> root)
 
 -- | Construct DAWG from the list of (word, value) pairs.
 fromList :: (Enum a, Ord b) => [([a], b)] -> DAWG a b
@@ -216,7 +239,6 @@ fromList xs =
     let update t (x, v) = insert x v t
     in  foldl' update empty xs
 {-# INLINE fromList #-}
-{-# SPECIALIZE fromList :: Ord b => [(String, b)] -> DAWG Char b #-}
 
 -- | Construct DAWG from the list of (word, value) pairs
 -- with a combining function.  The combining function is
@@ -236,3 +258,13 @@ fromListWith f xs =
 fromLang :: Enum a => [[a]] -> DAWG a ()
 fromLang xs = fromList [(x, ()) | x <- xs]
 {-# SPECIALIZE fromLang :: [String] -> DAWG Char () #-}
+
+
+----------------
+-- Misc
+----------------
+
+
+liftMaybe :: Monad m => Maybe a -> MaybeT m a
+liftMaybe = MaybeT . return
+{-# INLINE liftMaybe #-}

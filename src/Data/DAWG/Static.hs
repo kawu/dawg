@@ -18,6 +18,7 @@ module Data.DAWG.Static
   DAWG
 -- * Query
 , lookup
+, withPrefix
 , numStates
 , numEdges
 -- * Index
@@ -93,33 +94,50 @@ nodeBy i d = unDAWG d V.! i
 leafValue :: N.Node b c -> DAWG a b c -> Maybe c
 leafValue n = N.value . nodeBy (N.eps n)
 
+-- | Follow the path from the given identifier.
+follow :: Unbox b => [Sym] -> ID -> DAWG a b c -> Maybe ID
+follow (x:xs) i d = do
+    j <- N.onSym x (nodeBy i d)
+    follow xs j d
+follow [] i _ = Just i
+
 -- | Find value associated with the key.
 lookup :: (Enum a, Unbox b) => [a] -> DAWG a b c -> Maybe c
-lookup xs' =
-    let xs = map fromEnum xs'
-    in  lookup'I xs 0
+lookup xs = lookup'I (map fromEnum xs) 0
 {-# SPECIALIZE lookup :: Unbox b => String -> DAWG Char b c -> Maybe c #-}
 
 lookup'I :: Unbox b => [Sym] -> ID -> DAWG a b c -> Maybe c
-lookup'I []     i d = leafValue (nodeBy i d) d
-lookup'I (x:xs) i d = case N.onSym x (nodeBy i d) of
-    Just j  -> lookup'I xs j d
-    Nothing -> Nothing
+lookup'I xs i d = do
+    j <- follow xs i d
+    leafValue (nodeBy j d) d
 
--- | Return all key/value pairs in the DAWG in ascending key order.
+-- | Find all (key, value) pairs such that key is prefixed
+-- with the given string.
+withPrefix :: (Enum a, Unbox b) => [a] -> DAWG a b c -> [([a], c)]
+withPrefix xs d = maybe [] id $ do
+    i <- follow (map fromEnum xs) 0 d
+    let prepare = (xs ++) . map toEnum
+    return $ map (first prepare) (subPairs i d)
+{-# SPECIALIZE withPrefix
+    :: Unbox b => String -> DAWG Char b c
+    -> [(String, c)] #-}
+
+-- | Return all (key, value) pairs in the DAWG in ascending key order.
 assocs :: (Enum a, Unbox b) => DAWG a b c -> [([a], c)]
-assocs d = map (first (map toEnum)) (assocs'I 0 d)
+assocs d = map (first (map toEnum)) (subPairs 0 d)
 {-# SPECIALIZE assocs :: Unbox b => DAWG Char b c -> [(String, c)] #-}
 
-assocs'I :: Unbox b => ID -> DAWG a b c -> [([Sym], c)]
-assocs'I i d =
+-- | Return all (key, value) pairs in ascending key order in the
+-- sub-DAWG determined by the given node ID.
+subPairs :: Unbox b => ID -> DAWG a b c -> [([Sym], c)]
+subPairs i d =
     here ++ concatMap there (N.edges n)
   where
     n = nodeBy i d
     here = case leafValue n d of
         Just x  -> [([], x)]
         Nothing -> []
-    there (x, j) = map (first (x:)) (assocs'I j d)
+    there (x, j) = map (first (x:)) (subPairs j d)
 
 -- | Return all keys of the DAWG in ascending order.
 keys :: (Enum a, Unbox b) => DAWG a b c -> [[a]]
@@ -128,7 +146,7 @@ keys = map fst . assocs
 
 -- | Return all elements of the DAWG in the ascending order of their keys.
 elems :: Unbox b => DAWG a b c -> [c]
-elems = map snd . assocs'I 0
+elems = map snd . subPairs 0
 
 -- | Construct 'DAWG' from the list of (word, value) pairs.
 -- First a 'D.DAWG' is created and then it is frozen using
