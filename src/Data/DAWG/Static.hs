@@ -1,5 +1,6 @@
 {-# LANGUAGE RecordWildCards #-}
 
+
 -- | The module implements /directed acyclic word graphs/ (DAWGs) internaly
 -- represented as /minimal acyclic deterministic finite-state automata/.
 --
@@ -8,43 +9,46 @@
 --   * Keeps all nodes in one array and therefore uses less memory,
 --
 --   * When 'weigh'ed, it can be used to perform static hashing with
---     'hash' and 'unHash' functions,
+--     'index' and 'byIndex' functions,
 --
 --   * Doesn't provide insert/delete family of operations.
+
 
 module Data.DAWG.Static
 (
 -- * DAWG type
   DAWG
+
 -- * Query
 , lookup
-, withPrefix
+, submap
 , numStates
 , numEdges
--- * Index
+
+-- * Weight
+, Weight
+, weigh
+, size
 , index
 , byIndex
--- * Hash
-, hash
-, unHash
+
 -- * Construction
 , empty
 , fromList
 , fromListWith
 , fromLang
-, freeze
--- * Weight
-, Weight
-, weigh
+
 -- * Conversion
 , assocs
 , keys
 , elems
+, freeze
 -- , thaw
 ) where
 
+
 import Prelude hiding (lookup)
-import Control.Applicative ((<$), (<$>), (<|>))
+import Control.Applicative ((<$), (<$>), (<*>), (<|>))
 import Control.Arrow (first)
 import Data.Binary (Binary, put, get)
 import Data.Vector.Binary ()
@@ -61,38 +65,64 @@ import qualified Data.DAWG.Graph as G
 import qualified Data.DAWG.Dynamic as D
 import qualified Data.DAWG.Dynamic.Internal as D
 
+
 -- | @DAWG a b c@ constitutes an automaton with alphabet symbols of type /a/,
 -- transition labels of type /b/ and node values of type /Maybe c/.
 -- All nodes are stored in a 'V.Vector' with positions of nodes corresponding
 -- to their 'ID's.
-newtype DAWG a b c = DAWG { unDAWG :: V.Vector (N.Node b c) }
-    deriving (Show, Eq, Ord)
+--
+data DAWG a b c = DAWG
+    { unDAWG :: V.Vector (N.Node b c)
+    -- | The actual DAWG root has the 0 ID.  Thanks to the 'root' attribute,
+    -- we can represent a submap of the DAWG.
+    , root   :: ID
+    } deriving (Show, Eq, Ord)
 
 instance (Binary b, Binary c, Unbox b) => Binary (DAWG a b c) where
-    put = put . unDAWG
-    get = DAWG <$> get
+    put DAWG{..} = put unDAWG >> put root
+    get = DAWG <$> get <*> get
+
 
 -- | Empty DAWG.
 empty :: Unbox b => DAWG a b c
-empty = DAWG $ V.fromList
+empty = flip DAWG 0 $ V.fromList
     [ N.Branch 1 T.empty U.empty
     , N.Leaf Nothing ]
 
+
+-- | Return the sub-DAWG containing all keys beginning with a prefix.
+-- The in-memory representation of the resultant DAWG is the same as of
+-- the original one, only the pointer to the DAWG root will be different.
+submap :: (Enum a, Unbox b) => [a] -> DAWG a b c -> Maybe (DAWG a b c)
+submap xs d = DAWG (unDAWG d) <$> follow (map fromEnum xs) (root d) d
+{-# SPECIALIZE submap
+    :: Unbox b => String -> DAWG Char b c
+    -> Maybe (DAWG Char b c) #-}
+
+
 -- | Number of states in the automaton.
+-- TODO: The function ignores the `root` value, it won't work properly
+-- after using the `submap` function.
 numStates :: DAWG a b c -> Int
 numStates = V.length . unDAWG
 
+
 -- | Number of edges in the automaton.
+-- TODO: The function ignores the `root` value, it won't work properly
+-- after using the `submap` function.
 numEdges :: DAWG a b c -> Int
 numEdges = sum . map (length . N.edges) . V.toList . unDAWG
+
 
 -- | Node with the given identifier.
 nodeBy :: ID -> DAWG a b c -> N.Node b c
 nodeBy i d = unDAWG d V.! i
 
+
 -- | Value in leaf node with a given ID.
 leafValue :: N.Node b c -> DAWG a b c -> Maybe c
 leafValue n = N.value . nodeBy (N.eps n)
+
 
 -- | Follow the path from the given identifier.
 follow :: Unbox b => [Sym] -> ID -> DAWG a b c -> Maybe ID
@@ -101,31 +131,30 @@ follow (x:xs) i d = do
     follow xs j d
 follow [] i _ = Just i
 
+
 -- | Find value associated with the key.
 lookup :: (Enum a, Unbox b) => [a] -> DAWG a b c -> Maybe c
-lookup xs = lookup'I (map fromEnum xs) 0
+lookup xs d = lookup'I (map fromEnum xs) (root d) d
 {-# SPECIALIZE lookup :: Unbox b => String -> DAWG Char b c -> Maybe c #-}
+
 
 lookup'I :: Unbox b => [Sym] -> ID -> DAWG a b c -> Maybe c
 lookup'I xs i d = do
     j <- follow xs i d
     leafValue (nodeBy j d) d
 
--- | Find all (key, value) pairs such that key is prefixed
--- with the given string.
-withPrefix :: (Enum a, Unbox b) => [a] -> DAWG a b c -> [([a], c)]
-withPrefix xs d = maybe [] id $ do
-    i <- follow (map fromEnum xs) 0 d
-    let prepare = (xs ++) . map toEnum
-    return $ map (first prepare) (subPairs i d)
-{-# SPECIALIZE withPrefix
-    :: Unbox b => String -> DAWG Char b c
-    -> [(String, c)] #-}
 
--- | Return all (key, value) pairs in the DAWG in ascending key order.
-assocs :: (Enum a, Unbox b) => DAWG a b c -> [([a], c)]
-assocs d = map (first (map toEnum)) (subPairs 0 d)
-{-# SPECIALIZE assocs :: Unbox b => DAWG Char b c -> [(String, c)] #-}
+-- -- | Find all (key, value) pairs such that key is prefixed
+-- -- with the given string.
+-- withPrefix :: (Enum a, Unbox b) => [a] -> DAWG a b c -> [([a], c)]
+-- withPrefix xs d = maybe [] id $ do
+--     i <- follow (map fromEnum xs) 0 d
+--     let prepare = (xs ++) . map toEnum
+--     return $ map (first prepare) (subPairs i d)
+-- {-# SPECIALIZE withPrefix
+--     :: Unbox b => String -> DAWG Char b c
+--     -> [(String, c)] #-}
+
 
 -- | Return all (key, value) pairs in ascending key order in the
 -- sub-DAWG determined by the given node ID.
@@ -139,14 +168,23 @@ subPairs i d =
         Nothing -> []
     there (x, j) = map (first (x:)) (subPairs j d)
 
+
+-- | Return all (key, value) pairs in the DAWG in ascending key order.
+assocs :: (Enum a, Unbox b) => DAWG a b c -> [([a], c)]
+assocs d = map (first (map toEnum)) (subPairs (root d) d)
+{-# SPECIALIZE assocs :: Unbox b => DAWG Char b c -> [(String, c)] #-}
+
+
 -- | Return all keys of the DAWG in ascending order.
 keys :: (Enum a, Unbox b) => DAWG a b c -> [[a]]
 keys = map fst . assocs
 {-# SPECIALIZE keys :: Unbox b => DAWG Char b c -> [String] #-}
 
+
 -- | Return all elements of the DAWG in the ascending order of their keys.
 elems :: Unbox b => DAWG a b c -> [c]
-elems = map snd . subPairs 0
+elems d = map snd $ subPairs (root d) d
+
 
 -- | Construct 'DAWG' from the list of (word, value) pairs.
 -- First a 'D.DAWG' is created and then it is frozen using
@@ -154,6 +192,7 @@ elems = map snd . subPairs 0
 fromList :: (Enum a, Ord b) => [([a], b)] -> DAWG a () b
 fromList = freeze . D.fromList
 {-# SPECIALIZE fromList :: Ord b => [(String, b)] -> DAWG Char () b #-}
+
 
 -- | Construct DAWG from the list of (word, value) pairs
 -- with a combining function.  The combining function is
@@ -165,6 +204,7 @@ fromListWith f = freeze . D.fromListWith f
         :: Ord b => (b -> b -> b)
         -> [(String, b)] -> DAWG Char () b #-}
 
+
 -- | Make DAWG from the list of words.  Annotate each word with
 -- the @()@ value.  First a 'D.DAWG' is created and then it is frozen
 -- using the 'freeze' function.
@@ -172,14 +212,18 @@ fromLang :: Enum a => [[a]] -> DAWG a () ()
 fromLang = freeze . D.fromLang
 {-# SPECIALIZE fromLang :: [String] -> DAWG Char () () #-}
 
+
 -- | Weight of a node corresponds to the number of final states
 -- reachable from the node.  Weight of an edge is a sum of weights
 -- of preceding nodes outgoing from the same parent node.
 type Weight = Int
 
+
 -- | Compute node weights and store corresponding values in transition labels.
+-- Be aware, that the entire DAWG will be weighted, even when (because of the use of
+-- the `submap` function) only a part of the DAWG is currently selected.
 weigh :: DAWG a b c -> DAWG a Weight c
-weigh d = (DAWG . V.fromList)
+weigh d = flip DAWG (root d) $ V.fromList
     [ branch n ws
     | i <- [0 .. numStates d - 1]
     , let n  = nodeBy i d
@@ -199,13 +243,14 @@ weigh d = (DAWG . V.fromList)
     -- Plain children and epsilon child. 
     allChildren n = N.eps n : N.children n
 
+
 -- | Construct immutable version of the automaton.
 freeze :: D.DAWG a b -> DAWG a () b
-freeze d = DAWG . V.fromList $
+freeze d = flip DAWG 0 . V.fromList $
     map (N.fromDyn newID . oldBy)
         (M.elems (inverse old2new))
   where
-    -- Map from old to new identifiers.
+    -- Map from old to new identifiers.  The root identifier is mapped to 0.
     old2new = M.fromList $ (D.root d, 0) : zip (nodeIDs d) [1..]
     newID   = (M.!) old2new
     -- List of node IDs without the root ID.
@@ -213,11 +258,13 @@ freeze d = DAWG . V.fromList $
     -- Non-frozen node by given identifier.
     oldBy i = G.nodeBy i (D.graph d)
         
+
 -- | Inverse of the map.
 inverse :: M.IntMap Int -> M.IntMap Int
 inverse =
     let swap (x, y) = (y, x)
     in  M.fromList . map swap . M.toList
+
 
 -- -- | Yield mutable version of the automaton.
 -- thaw :: (Unbox b, Ord a) => DAWG a b c -> D.DAWG a b
@@ -242,11 +289,31 @@ inverse =
 --             let j = GM.size m + n
 --             in  j `seq` GM.insert v j
 
+
+-- | A number of distinct (key, value) pairs in the weighted DAWG.
+size :: DAWG a Weight c -> Int
+size d = size'I (root d) d
+
+
+size'I :: ID -> DAWG a Weight c -> Int
+size'I i d = add $ do
+    x <- case N.edges n of
+        [] -> Nothing
+        xs -> Just (fst $ last xs)
+    (j, v) <- N.onSym' x n
+    return $ v + size'I j d
+  where
+    n = nodeBy i d
+    u = maybe 0 (const 1) (leafValue n d)
+    add m = u + maybe 0 id m
+
+
 -- | Position in a set of all dictionary entries with respect
 -- to the lexicographic order.
 index :: Enum a => [a] -> DAWG a Weight c -> Maybe Int
 index xs = index'I (map fromEnum xs) 0
 {-# SPECIALIZE index :: String -> DAWG Char Weight c -> Maybe Int #-}
+
 
 index'I :: [Sym] -> ID -> DAWG a Weight c -> Maybe Int
 index'I []     i d = 0 <$ leafValue (nodeBy i d) d
@@ -257,17 +324,13 @@ index'I (x:xs) i d = do
     w <- index'I xs j d
     return (u + v + w)
 
--- | Perfect hashing function for dictionary entries.
--- A synonym for the 'index' function.
-hash :: Enum a => [a] -> DAWG a Weight c -> Maybe Int
-hash = index
-{-# INLINE hash #-}
 
 -- | Find dictionary entry given its index with respect to the
 -- lexicographic order.
 byIndex :: Enum a => Int -> DAWG a Weight c -> Maybe [a]
 byIndex ix d = map toEnum <$> byIndex'I ix 0 d
 {-# SPECIALIZE byIndex :: Int -> DAWG Char Weight c -> Maybe String #-}
+
 
 byIndex'I :: Int -> ID -> DAWG a Weight c -> Maybe [Sym]
 byIndex'I ix i d
@@ -285,8 +348,3 @@ byIndex'I ix i d
         xs <- byIndex'I (ix - u - w) j d
         return (x:xs)
     cmp w = compare w (ix - u)
-
--- | Inverse of the 'hash' function and a synonym for the 'byIndex' function.
-unHash :: Enum a => Int -> DAWG a Weight c -> Maybe [a]
-unHash = byIndex
-{-# INLINE unHash #-}

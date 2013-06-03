@@ -6,15 +6,17 @@
 -- The implementation provides fast insert and delete operations
 -- which can be used to build the DAWG structure incrementaly.
 
+
 module Data.DAWG.Dynamic
 (
 -- * DAWG type
   DAWG
+
 -- * Query
 , lookup
-, withPrefix
 , numStates
 , numEdges
+
 -- * Construction
 , empty
 , fromList
@@ -25,11 +27,13 @@ module Data.DAWG.Dynamic
 , insertWith
 -- ** Deletion
 , delete
+
 -- * Conversion
 , assocs
 , keys
 , elems
 ) where
+
 
 import Prelude hiding (lookup)
 import Control.Applicative ((<$>), (<*>))
@@ -45,6 +49,7 @@ import Data.DAWG.Dynamic.Internal
 import qualified Data.DAWG.Trans as T
 import qualified Data.DAWG.Graph as G
 import qualified Data.DAWG.Dynamic.Node as N
+
 
 type GraphM a = S.State (Graph (N.Node a))
 
@@ -205,17 +210,17 @@ lookup xs' d =
     in  S.evalState (lookupM xs $ root d) (graph d)
 {-# SPECIALIZE lookup :: Ord b => String -> DAWG Char b -> Maybe b #-}
 
--- | Find all (key, value) pairs such that key is prefixed
--- with the given string.
-withPrefix :: (Enum a, Ord b) => [a] -> DAWG a b -> [([a], b)]
-withPrefix xs DAWG{..}
-    = map (first $ (xs ++) . map toEnum)
-    $ maybe [] (subPairs graph)
-    $ flip S.evalState graph $ runMaybeT
-    $ follow (map fromEnum xs) root
-{-# SPECIALIZE withPrefix
-    :: Ord b => String -> DAWG Char b
-    -> [(String, b)] #-}
+-- -- | Find all (key, value) pairs such that key is prefixed
+-- -- with the given string.
+-- withPrefix :: (Enum a, Ord b) => [a] -> DAWG a b -> [([a], b)]
+-- withPrefix xs DAWG{..}
+--     = map (first $ (xs ++) . map toEnum)
+--     $ maybe [] (subPairs graph)
+--     $ flip S.evalState graph $ runMaybeT
+--     $ follow (map fromEnum xs) root
+-- {-# SPECIALIZE withPrefix
+--     :: Ord b => String -> DAWG Char b
+--     -> [(String, b)] #-}
 
 -- | Return all key/value pairs in the DAWG in ascending key order.
 assocs :: (Enum a, Ord b) => DAWG a b -> [([a], b)]
