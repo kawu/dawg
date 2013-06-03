@@ -311,7 +311,7 @@ size'I i d = add $ do
 -- | Position in a set of all dictionary entries with respect
 -- to the lexicographic order.
 index :: Enum a => [a] -> DAWG a Weight c -> Maybe Int
-index xs = index'I (map fromEnum xs) 0
+index xs d = index'I (map fromEnum xs) (root d) d
 {-# SPECIALIZE index :: String -> DAWG Char Weight c -> Maybe Int #-}
 
 
@@ -328,7 +328,7 @@ index'I (x:xs) i d = do
 -- | Find dictionary entry given its index with respect to the
 -- lexicographic order.
 byIndex :: Enum a => Int -> DAWG a Weight c -> Maybe [a]
-byIndex ix d = map toEnum <$> byIndex'I ix 0 d
+byIndex ix d = map toEnum <$> byIndex'I ix (root d) d
 {-# SPECIALIZE byIndex :: Int -> DAWG Char Weight c -> Maybe String #-}
 
 
