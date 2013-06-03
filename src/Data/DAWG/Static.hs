@@ -93,11 +93,11 @@ empty = flip DAWG 0 $ V.fromList
 -- | Return the sub-DAWG containing all keys beginning with a prefix.
 -- The in-memory representation of the resultant DAWG is the same as of
 -- the original one, only the pointer to the DAWG root will be different.
-submap :: (Enum a, Unbox b) => [a] -> DAWG a b c -> Maybe (DAWG a b c)
-submap xs d = DAWG (unDAWG d) <$> follow (map fromEnum xs) (root d) d
-{-# SPECIALIZE submap
-    :: Unbox b => String -> DAWG Char b c
-    -> Maybe (DAWG Char b c) #-}
+submap :: (Enum a, Unbox b) => [a] -> DAWG a b c -> DAWG a b c
+submap xs d = case follow (map fromEnum xs) (root d) d of
+    Just i  -> DAWG (unDAWG d) i 
+    Nothing -> empty
+{-# SPECIALIZE submap :: Unbox b => String -> DAWG Char b c -> DAWG Char b c #-}
 
 
 -- | Number of states in the automaton.
