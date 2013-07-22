@@ -1,6 +1,6 @@
 {-# LANGUAGE RecordWildCards #-}
 
--- | Internal representation of static automata nodes.
+-- | Internal representation of a static automata node.
 
 module Data.DAWG.Static.Node
 ( Node(..)

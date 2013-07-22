@@ -19,8 +19,14 @@ module Data.DAWG.Static
 -- * DAWG type
   DAWG
 
+-- * ID
+, ID
+, rootID
+, byID
+
 -- * Query
 , lookup
+, edges
 , submap
 , numStates
 , numEdges
@@ -72,15 +78,25 @@ import qualified Data.DAWG.Dynamic.Internal as D
 -- to their 'ID's.
 --
 data DAWG a b c = DAWG
-    { unDAWG :: V.Vector (N.Node b c)
-    -- | The actual DAWG root has the 0 ID.  Thanks to the 'root' attribute,
-    -- we can represent a submap of the DAWG.
-    , root   :: ID
+    { nodes  :: V.Vector (N.Node b c)
+    -- | The actual DAWG root has the 0 ID.  Thanks to the 'rootID'
+    -- attribute, we can represent a submap of a DAWG.
+    , rootID :: ID
     } deriving (Show, Eq, Ord)
 
 instance (Binary b, Binary c, Unbox b) => Binary (DAWG a b c) where
-    put DAWG{..} = put unDAWG >> put root
+    put DAWG{..} = put nodes >> put rootID
     get = DAWG <$> get <*> get
+
+
+-- | Retrieve sub-DAWG with a given ID (or `Nothing`, if there's
+-- no such DAWG).  This function can be used, together with the
+-- `root` function, to store IDs rather than entire DAWGs in a
+-- data structure.
+byID :: ID -> DAWG a b c -> Maybe (DAWG a b c)
+byID i d = if i >= 0 && i < V.length (nodes d)
+    then Just (d { rootID = i })
+    else Nothing
 
 
 -- | Empty DAWG.
@@ -90,33 +106,42 @@ empty = flip DAWG 0 $ V.fromList
     , N.Leaf Nothing ]
 
 
+-- | A list of outgoing edges.
+edges :: Enum a => DAWG a b c -> [(a, DAWG a b c)]
+edges d =
+    [ (toEnum sym, d{ rootID = i })
+    | (sym, i) <- N.edges n ]
+  where
+    n = nodeBy (rootID d) d
+
+
 -- | Return the sub-DAWG containing all keys beginning with a prefix.
 -- The in-memory representation of the resultant DAWG is the same as of
 -- the original one, only the pointer to the DAWG root will be different.
 submap :: (Enum a, Unbox b) => [a] -> DAWG a b c -> DAWG a b c
-submap xs d = case follow (map fromEnum xs) (root d) d of
-    Just i  -> DAWG (unDAWG d) i 
+submap xs d = case follow (map fromEnum xs) (rootID d) d of
+    Just i  -> d { rootID = i }
     Nothing -> empty
 {-# SPECIALIZE submap :: Unbox b => String -> DAWG Char b c -> DAWG Char b c #-}
 
 
 -- | Number of states in the automaton.
--- TODO: The function ignores the `root` value, it won't work properly
+-- TODO: The function ignores the `rootID` value, it won't work properly
 -- after using the `submap` function.
 numStates :: DAWG a b c -> Int
-numStates = V.length . unDAWG
+numStates = V.length . nodes
 
 
 -- | Number of edges in the automaton.
--- TODO: The function ignores the `root` value, it won't work properly
+-- TODO: The function ignores the `rootID` value, it won't work properly
 -- after using the `submap` function.
 numEdges :: DAWG a b c -> Int
-numEdges = sum . map (length . N.edges) . V.toList . unDAWG
+numEdges = sum . map (length . N.edges) . V.toList . nodes
 
 
 -- | Node with the given identifier.
 nodeBy :: ID -> DAWG a b c -> N.Node b c
-nodeBy i d = unDAWG d V.! i
+nodeBy i d = nodes d V.! i
 
 
 -- | Value in leaf node with a given ID.
@@ -134,7 +159,7 @@ follow [] i _ = Just i
 
 -- | Find value associated with the key.
 lookup :: (Enum a, Unbox b) => [a] -> DAWG a b c -> Maybe c
-lookup xs d = lookup'I (map fromEnum xs) (root d) d
+lookup xs d = lookup'I (map fromEnum xs) (rootID d) d
 {-# SPECIALIZE lookup :: Unbox b => String -> DAWG Char b c -> Maybe c #-}
 
 
@@ -171,7 +196,7 @@ subPairs i d =
 
 -- | Return all (key, value) pairs in the DAWG in ascending key order.
 assocs :: (Enum a, Unbox b) => DAWG a b c -> [([a], c)]
-assocs d = map (first (map toEnum)) (subPairs (root d) d)
+assocs d = map (first (map toEnum)) (subPairs (rootID d) d)
 {-# SPECIALIZE assocs :: Unbox b => DAWG Char b c -> [(String, c)] #-}
 
 
@@ -183,7 +208,7 @@ keys = map fst . assocs
 
 -- | Return all elements of the DAWG in the ascending order of their keys.
 elems :: Unbox b => DAWG a b c -> [c]
-elems d = map snd $ subPairs (root d) d
+elems d = map snd $ subPairs (rootID d) d
 
 
 -- | Construct 'DAWG' from the list of (word, value) pairs.
@@ -223,7 +248,7 @@ type Weight = Int
 -- Be aware, that the entire DAWG will be weighted, even when (because of the use of
 -- the `submap` function) only a part of the DAWG is currently selected.
 weigh :: DAWG a b c -> DAWG a Weight c
-weigh d = flip DAWG (root d) $ V.fromList
+weigh d = flip DAWG (rootID d) $ V.fromList
     [ branch n ws
     | i <- [0 .. numStates d - 1]
     , let n  = nodeBy i d
@@ -281,7 +306,7 @@ inverse =
 --     -- New identifiers for value nodes.
 --     valIDs = foldl' updID GM.empty (values d)
 --     -- Values in the automaton.
---     values = map value . V.toList . unDAWG
+--     values = map value . V.toList . nodes
 --     -- Update ID map.
 --     updID m v = case GM.lookup v m of
 --         Just i  -> m
@@ -292,7 +317,7 @@ inverse =
 
 -- | A number of distinct (key, value) pairs in the weighted DAWG.
 size :: DAWG a Weight c -> Int
-size d = size'I (root d) d
+size d = size'I (rootID d) d
 
 
 size'I :: ID -> DAWG a Weight c -> Int
@@ -308,10 +333,15 @@ size'I i d = add $ do
     add m = u + maybe 0 id m
 
 
+-----------------------------------------
+-- Index
+-----------------------------------------
+
+
 -- | Position in a set of all dictionary entries with respect
 -- to the lexicographic order.
 index :: Enum a => [a] -> DAWG a Weight c -> Maybe Int
-index xs d = index'I (map fromEnum xs) (root d) d
+index xs d = index'I (map fromEnum xs) (rootID d) d
 {-# SPECIALIZE index :: String -> DAWG Char Weight c -> Maybe Int #-}
 
 
@@ -328,7 +358,7 @@ index'I (x:xs) i d = do
 -- | Find dictionary entry given its index with respect to the
 -- lexicographic order.
 byIndex :: Enum a => Int -> DAWG a Weight c -> Maybe [a]
-byIndex ix d = map toEnum <$> byIndex'I ix (root d) d
+byIndex ix d = map toEnum <$> byIndex'I ix (rootID d) d
 {-# SPECIALIZE byIndex :: Int -> DAWG Char Weight c -> Maybe String #-}
 
 
